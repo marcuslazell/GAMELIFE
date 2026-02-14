@@ -442,7 +442,7 @@ struct BossFormSheet: View {
     }
 
     private var selectableDynamicGoalTypes: [DynamicBossGoalType] {
-        DynamicBossGoalType.allCases.filter { $0 != .screenTimeDiscipline }
+        DynamicBossGoalType.betaSelectableTypes
     }
 
     var body: some View {

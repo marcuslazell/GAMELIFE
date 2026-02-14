@@ -9,6 +9,13 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Feature Flags
+
+enum AppFeatureFlags {
+    // Temporary beta switch. Set true to re-enable Screen Time flows.
+    static let screenTimeEnabled = false
+}
+
 // MARK: - Quest Type
 
 /// The three pillars of the quest system
@@ -66,6 +73,13 @@ enum QuestTrackingType: String, Codable {
 
     var isAutomatic: Bool {
         self != .manual
+    }
+
+    static var betaSelectableTypes: [QuestTrackingType] {
+        if AppFeatureFlags.screenTimeEnabled {
+            return [.manual, .healthKit, .screenTime, .location]
+        }
+        return [.manual, .healthKit, .location]
     }
 }
 
@@ -184,6 +198,13 @@ enum DynamicBossGoalType: String, Codable, CaseIterable, Identifiable {
 
     var isScreenTimeDriven: Bool {
         self == .screenTimeDiscipline
+    }
+
+    static var betaSelectableTypes: [DynamicBossGoalType] {
+        if AppFeatureFlags.screenTimeEnabled {
+            return allCases
+        }
+        return allCases.filter { $0 != .screenTimeDiscipline }
     }
 }
 

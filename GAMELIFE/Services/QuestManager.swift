@@ -59,6 +59,7 @@ class QuestManager: ObservableObject {
     ///   - quest: The quest to monitor
     ///   - apps: The selected apps/categories to track
     func startMonitoring(for quest: DailyQuest, apps: FamilyActivitySelection) {
+        guard AppFeatureFlags.screenTimeEnabled else { return }
         guard quest.trackingType == .screenTime else { return }
 
         let activityName = DeviceActivityName("quest_\(quest.id.uuidString)")
@@ -116,6 +117,7 @@ class QuestManager: ObservableObject {
 
     /// Check for quest completions reported by the DeviceActivityMonitor extension
     func checkExtensionCompletions() {
+        guard AppFeatureFlags.screenTimeEnabled else { return }
         guard let completedIds = sharedDefaults?.array(forKey: SharedKeys.completedQuestIds) as? [String] else {
             return
         }
@@ -137,6 +139,7 @@ class QuestManager: ObservableObject {
 
     /// Get progress updates from extension
     func getProgressFromExtension() -> [UUID: Double] {
+        guard AppFeatureFlags.screenTimeEnabled else { return [:] }
         guard let progressData = sharedDefaults?.dictionary(forKey: SharedKeys.questProgress) as? [String: Double] else {
             return [:]
         }
@@ -184,6 +187,7 @@ class QuestManager: ObservableObject {
     }
 
     @objc private func appDidBecomeActive() {
+        guard AppFeatureFlags.screenTimeEnabled else { return }
         checkExtensionCompletions()
     }
 
@@ -191,6 +195,10 @@ class QuestManager: ObservableObject {
 
     /// Sync all active ScreenTime quests with the extension
     func syncActiveQuests(_ quests: [DailyQuest]) {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            sharedDefaults?.removeObject(forKey: SharedKeys.activeScreenTimeQuests)
+            return
+        }
         let screenTimeQuests = quests.filter {
             $0.trackingType == .screenTime && $0.status != .completed
         }
@@ -213,6 +221,11 @@ class QuestManager: ObservableObject {
 
     /// Ensure all active Screen Time quests are monitored and stale monitors are removed.
     func synchronizeMonitoring(with quests: [DailyQuest]) {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            stopAllMonitoring()
+            sharedDefaults?.removeObject(forKey: SharedKeys.activeScreenTimeQuests)
+            return
+        }
         let activeScreenTimeQuests = quests.filter {
             $0.trackingType == .screenTime && $0.status != .completed
         }

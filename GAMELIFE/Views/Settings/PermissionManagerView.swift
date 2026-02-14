@@ -56,7 +56,7 @@ struct PermissionManagerView: View {
 
             // Neural Links
             Section {
-                ForEach(NeuralLinkType.allCases) { linkType in
+                ForEach(NeuralLinkType.betaAvailableCases) { linkType in
                     NeuralLinkRow(
                         type: linkType,
                         status: permissionManager.status(for: linkType),
@@ -77,12 +77,14 @@ struct PermissionManagerView: View {
                     lastUpdateText: relativeText(healthKitManager.lastSyncDate),
                     backgroundActive: healthKitManager.backgroundDeliveryEnabled
                 )
-                NeuralLinkSignalRow(
-                    title: "Mind Activity",
-                    connected: permissionManager.screenTimeEnabled,
-                    lastUpdateText: relativeText(screenTimeManager.lastSyncDate),
-                    backgroundActive: screenTimeManager.isUsageMonitoringActive
-                )
+                if AppFeatureFlags.screenTimeEnabled {
+                    NeuralLinkSignalRow(
+                        title: "Mind Activity",
+                        connected: permissionManager.screenTimeEnabled,
+                        lastUpdateText: relativeText(screenTimeManager.lastSyncDate),
+                        backgroundActive: screenTimeManager.isUsageMonitoringActive
+                    )
+                }
                 NeuralLinkSignalRow(
                     title: "World Position",
                     connected: permissionManager.locationEnabled,
@@ -103,7 +105,7 @@ struct PermissionManagerView: View {
 
             // What each link does
             Section {
-                ForEach(NeuralLinkType.allCases) { linkType in
+                ForEach(NeuralLinkType.betaAvailableCases) { linkType in
                     NeuralLinkExplanation(type: linkType)
                 }
             } header: {

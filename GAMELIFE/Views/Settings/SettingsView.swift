@@ -109,7 +109,7 @@ struct SettingsView: View {
             } header: {
                 Text("Data Connections")
             } footer: {
-                Text("Connect GAMELIFE to health, screen time, and location data")
+                Text("Connect GAMELIFE to health and location data")
             }
 
             // Statistics Section
@@ -222,20 +222,24 @@ struct ConnectionStatusBadge: View {
     private var connectedCount: Int {
         var count = 0
         if permissionManager.healthKitEnabled { count += 1 }
-        if permissionManager.screenTimeEnabled { count += 1 }
+        if AppFeatureFlags.screenTimeEnabled && permissionManager.screenTimeEnabled { count += 1 }
         if permissionManager.locationEnabled { count += 1 }
         if permissionManager.notificationsEnabled { count += 1 }
         return count
     }
 
+    private var totalCount: Int {
+        NeuralLinkType.betaAvailableCases.count
+    }
+
     var body: some View {
-        Text("\(connectedCount)/4")
+        Text("\(connectedCount)/\(totalCount)")
             .font(SystemTypography.mono(12, weight: .semibold))
-            .foregroundStyle(connectedCount == 4 ? SystemTheme.successGreen : SystemTheme.textTertiary)
+            .foregroundStyle(connectedCount == totalCount ? SystemTheme.successGreen : SystemTheme.textTertiary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
-                (connectedCount == 4 ? SystemTheme.successGreen : SystemTheme.textTertiary).opacity(0.1)
+                (connectedCount == totalCount ? SystemTheme.successGreen : SystemTheme.textTertiary).opacity(0.1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .onAppear {

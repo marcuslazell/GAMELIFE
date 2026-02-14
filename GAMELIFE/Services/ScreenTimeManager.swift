@@ -54,6 +54,12 @@ class ScreenTimeManager: ObservableObject {
 
     private init() {
         loadTrackedUsage()
+        guard AppFeatureFlags.screenTimeEnabled else {
+            isAuthorized = false
+            isUsageMonitoringActive = false
+            lastDetectedEvent = "Usage tracking is disabled for this beta."
+            return
+        }
         refreshAuthorizationStatus()
         resetTrackedUsageIfNeeded()
         refreshExtensionState()
@@ -63,6 +69,9 @@ class ScreenTimeManager: ObservableObject {
 
     /// Request Screen Time authorization
     func requestAuthorization() async throws {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            throw ScreenTimeAuthorizationError.notAuthorized
+        }
         if center.authorizationStatus == .approved {
             isAuthorized = true
             return
@@ -78,6 +87,11 @@ class ScreenTimeManager: ObservableObject {
 
     /// Check current authorization status
     func refreshAuthorizationStatus() {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            isAuthorized = false
+            isUsageMonitoringActive = false
+            return
+        }
         switch center.authorizationStatus {
         case .approved:
             isAuthorized = true
@@ -170,6 +184,7 @@ class ScreenTimeManager: ObservableObject {
 
     /// Start blocking distracting apps for a dungeon session
     func startDungeonBlocking(duration: TimeInterval, categories: [AppCategory] = [.socialMedia, .entertainment, .games]) {
+        guard AppFeatureFlags.screenTimeEnabled else { return }
         guard isAuthorized else { return }
 
         // Create blocking session
@@ -220,6 +235,10 @@ class ScreenTimeManager: ObservableObject {
 
     /// Start monitoring app usage for quest tracking
     func startUsageMonitoring() {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            isUsageMonitoringActive = false
+            return
+        }
         guard isAuthorized else { return }
         resetTrackedUsageIfNeeded()
         refreshExtensionState()
@@ -246,12 +265,17 @@ class ScreenTimeManager: ObservableObject {
 
     /// Stop monitoring
     func stopUsageMonitoring() {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            isUsageMonitoringActive = false
+            return
+        }
         deviceActivityCenter.stopMonitoring([.init("daily_tracking")])
         isUsageMonitoringActive = false
     }
 
     /// Evaluate auto-tracking progress for a Screen Time quest.
     func checkQuestProgress(for quest: DailyQuest) -> Double {
+        guard AppFeatureFlags.screenTimeEnabled else { return 0 }
         guard quest.trackingType == .screenTime else { return 0 }
         guard isAuthorized else { return 0 }
 
@@ -273,6 +297,7 @@ class ScreenTimeManager: ObservableObject {
     }
 
     var isMonitorExtensionInstalled: Bool {
+        guard AppFeatureFlags.screenTimeEnabled else { return false }
         guard let pluginsPath = Bundle.main.builtInPlugInsPath else { return false }
         return FileManager.default.fileExists(atPath: "\(pluginsPath)/GAMELIFEMonitor.appex")
     }

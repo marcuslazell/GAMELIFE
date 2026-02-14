@@ -82,6 +82,7 @@ class GameEngine: ObservableObject {
         migrateLegacyStatBaselineIfNeeded()
 
         // Ensure loaded quests are in the active cycle and integrations are synced.
+        migrateDisabledScreenTimeDataIfNeeded()
         refreshQuestCyclesIfNeeded()
         syncBossLinksWithQuests()
         dailyQuests.forEach { NotificationManager.shared.scheduleQuestReminder(for: $0) }
@@ -91,7 +92,9 @@ class GameEngine: ObservableObject {
 
         // Set up health data observers
         setupHealthKitObservers()
-        setupScreenTimeObservers()
+        if AppFeatureFlags.screenTimeEnabled {
+            setupScreenTimeObservers()
+        }
         setupLocationQuestObservers()
         QuestManager.shared.synchronizeMonitoring(with: dailyQuests)
         setupCloudKitSync()
@@ -546,7 +549,7 @@ class GameEngine: ObservableObject {
         isInDungeon = true
 
         // Start app blocking if Screen Time is authorized
-        if ScreenTimeManager.shared.isAuthorized {
+        if AppFeatureFlags.screenTimeEnabled && ScreenTimeManager.shared.isAuthorized {
             ScreenTimeManager.shared.startDungeonBlocking(
                 duration: TimeInterval(minutes * 60)
             )
@@ -596,7 +599,9 @@ class GameEngine: ObservableObject {
         player.dungeonsClearedCount += 1
 
         // End blocking
-        ScreenTimeManager.shared.endDungeonBlocking()
+        if AppFeatureFlags.screenTimeEnabled {
+            ScreenTimeManager.shared.endDungeonBlocking()
+        }
 
         // Clear state
         activeDungeon?.complete()
@@ -621,7 +626,9 @@ class GameEngine: ObservableObject {
         activeDungeon?.fail()
 
         // End blocking
-        ScreenTimeManager.shared.endDungeonBlocking()
+        if AppFeatureFlags.screenTimeEnabled {
+            ScreenTimeManager.shared.endDungeonBlocking()
+        }
 
         // Apply penalty
         applyPenalty(reason: .dungeonFailed)
@@ -1157,6 +1164,7 @@ class GameEngine: ObservableObject {
             let workouts = await healthManager.fetchWorkoutCount(from: start, to: Date())
             return Double(workouts)
         case .screenTimeDiscipline:
+            guard AppFeatureFlags.screenTimeEnabled else { return nil }
             guard screenTimeManager.isAuthorized else { return nil }
             return Double(max(0, screenTimeManager.socialMediaMinutesToday))
         }
@@ -1230,6 +1238,7 @@ class GameEngine: ObservableObject {
     }
 
     func updateScreenTimeQuests() async {
+        guard AppFeatureFlags.screenTimeEnabled else { return }
         let screenTimeManager = ScreenTimeManager.shared
         var autoCompletedRewards: [(title: String, xp: Int, gold: Int)] = []
         QuestManager.shared.checkExtensionCompletions()
@@ -1270,6 +1279,53 @@ class GameEngine: ObservableObject {
         }
 
         await syncDynamicBossGoals()
+    }
+
+    private func migrateDisabledScreenTimeDataIfNeeded() {
+        guard !AppFeatureFlags.screenTimeEnabled else { return }
+
+        var didMutate = false
+
+        for index in dailyQuests.indices where dailyQuests[index].trackingType == .screenTime {
+            let quest = dailyQuests[index]
+            dailyQuests[index] = DailyQuest(
+                id: quest.id,
+                title: quest.title,
+                description: quest.description,
+                difficulty: quest.difficulty,
+                status: quest.status,
+                targetStats: quest.targetStats,
+                frequency: quest.frequency,
+                trackingType: .manual,
+                currentProgress: quest.currentProgress,
+                targetValue: quest.targetValue,
+                unit: quest.unit,
+                createdAt: quest.createdAt,
+                expiresAt: quest.expiresAt,
+                healthKitIdentifier: nil,
+                screenTimeCategory: nil,
+                screenTimeSelectionData: nil,
+                locationCoordinate: quest.locationCoordinate,
+                locationAddress: quest.locationAddress,
+                linkedBossID: quest.linkedBossID,
+                linkedDynamicBossID: quest.linkedDynamicBossID,
+                reminderEnabled: quest.reminderEnabled,
+                reminderTime: quest.reminderTime
+            )
+            didMutate = true
+        }
+
+        for index in activeBossFights.indices {
+            if activeBossFights[index].dynamicGoal?.type == .screenTimeDiscipline {
+                activeBossFights[index].dynamicGoal = nil
+                didMutate = true
+            }
+        }
+
+        if didMutate {
+            QuestManager.shared.synchronizeMonitoring(with: dailyQuests)
+            save()
+        }
     }
 
     /// Update quest progress from HealthKit

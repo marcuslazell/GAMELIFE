@@ -267,7 +267,7 @@ struct FirstLaunchSetupView: View {
                     .foregroundStyle(SystemTheme.textSecondary)
 
                 VStack(spacing: SystemSpacing.sm) {
-                    ForEach(NeuralLinkType.allCases) { type in
+                    ForEach(NeuralLinkType.betaAvailableCases) { type in
                         OnboardingPermissionRow(
                             type: type,
                             status: permissionManager.status(for: type),
@@ -633,7 +633,7 @@ struct FirstLaunchSetupView: View {
     private func connectAllPermissions() {
         Task {
             isConnectingAll = true
-            for linkType in NeuralLinkType.allCases {
+            for linkType in NeuralLinkType.betaAvailableCases {
                 await requestPermissionAsync(linkType)
             }
             await permissionManager.checkAllPermissions()

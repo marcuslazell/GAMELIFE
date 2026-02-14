@@ -139,6 +139,12 @@ class PermissionManager: ObservableObject {
     // MARK: - Screen Time
 
     func checkScreenTimeStatus() async {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            screenTimeStatus = .unavailable
+            screenTimeEnabled = false
+            return
+        }
+
         let center = AuthorizationCenter.shared
 
         switch center.authorizationStatus {
@@ -159,6 +165,12 @@ class PermissionManager: ObservableObject {
     }
 
     func requestScreenTime() async throws {
+        guard AppFeatureFlags.screenTimeEnabled else {
+            screenTimeStatus = .unavailable
+            screenTimeEnabled = false
+            throw PermissionError.unavailable
+        }
+
         do {
             try await ScreenTimeManager.shared.requestAuthorization()
             ScreenTimeManager.shared.startUsageMonitoring()
@@ -341,6 +353,13 @@ enum NeuralLinkType: String, CaseIterable, Identifiable {
     case systemMessages = "System Messages"
 
     var id: String { rawValue }
+
+    static var betaAvailableCases: [NeuralLinkType] {
+        if AppFeatureFlags.screenTimeEnabled {
+            return allCases
+        }
+        return allCases.filter { $0 != .mindActivity }
+    }
 
     var color: Color {
         switch self {

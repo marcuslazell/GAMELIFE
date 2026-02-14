@@ -816,7 +816,7 @@ struct SetupQuestsPhaseView: View {
 
                 // Neural Link options
                 VStack(spacing: 12) {
-                    ForEach(NeuralLinkType.allCases) { linkType in
+                    ForEach(NeuralLinkType.betaAvailableCases) { linkType in
                         SetupLinkRow(
                             type: linkType,
                             isConnected: permissionManager.isEnabled(for: linkType),

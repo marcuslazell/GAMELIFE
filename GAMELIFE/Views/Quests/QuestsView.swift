@@ -203,13 +203,15 @@ struct QuestsView: View {
             await healthKitManager.refreshTodayData()
         }
 
-        if screenTimeManager.isAuthorized {
+        if AppFeatureFlags.screenTimeEnabled && screenTimeManager.isAuthorized {
             screenTimeManager.refreshAuthorizationStatus()
             screenTimeManager.startUsageMonitoring()
         }
 
         await gameEngine.updateHealthKitQuests()
-        await gameEngine.updateScreenTimeQuests()
+        if AppFeatureFlags.screenTimeEnabled {
+            await gameEngine.updateScreenTimeQuests()
+        }
         gameEngine.save()
     }
 }
@@ -557,6 +559,9 @@ private struct QuestTrackingDiagnosticsRow: View {
             )
 
         case .screenTime:
+            guard AppFeatureFlags.screenTimeEnabled else {
+                return ("pause.circle.fill", "Usage tracking is temporarily disabled for this beta.", SystemTheme.textTertiary)
+            }
             guard permissionManager.screenTimeEnabled else {
                 return ("exclamationmark.triangle.fill", "Screen Time access missing. Connect Mind Activity in Neural Links.", SystemTheme.warningOrange)
             }

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT="$ROOT/GAMELIFE.xcodeproj"
+SCREEN_TIME_FLAG_FILE="$ROOT/GAMELIFE/Models/QuestModels.swift"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -11,12 +12,24 @@ fail() {
 
 echo "Running static regression checks..."
 
+if grep -q 'static let screenTimeEnabled = true' "$SCREEN_TIME_FLAG_FILE"; then
+  SCREEN_TIME_ENABLED=1
+else
+  SCREEN_TIME_ENABLED=0
+fi
+
 grep -q 'INFOPLIST_KEY_NSHealthShareUsageDescription' "$PROJECT/project.pbxproj" || fail "Missing NSHealthShareUsageDescription"
 grep -q 'INFOPLIST_KEY_NSHealthUpdateUsageDescription' "$PROJECT/project.pbxproj" || fail "Missing NSHealthUpdateUsageDescription"
 grep -q 'INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "' "$PROJECT/project.pbxproj" || fail "Missing NSLocationWhenInUseUsageDescription"
 grep -q 'INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "' "$PROJECT/project.pbxproj" || fail "Missing NSLocationAlwaysAndWhenInUseUsageDescription"
 
-grep -q 'com.apple.developer.family-controls' "$ROOT/GAMELIFE/GAMELIFE.entitlements" || fail "Missing Family Controls entitlement"
+if [[ "$SCREEN_TIME_ENABLED" -eq 1 ]]; then
+  grep -q 'com.apple.developer.family-controls' "$ROOT/GAMELIFE/GAMELIFE.entitlements" || fail "Missing Family Controls entitlement"
+else
+  if grep -q 'com.apple.developer.family-controls' "$ROOT/GAMELIFE/GAMELIFE.entitlements"; then
+    fail "Family Controls entitlement should be disabled in beta mode"
+  fi
+fi
 
 if grep -RInF '.preferredColorScheme(.dark)' "$ROOT/GAMELIFE" >/dev/null; then
   fail "Found hard-forced dark mode call(s)"
@@ -36,7 +49,7 @@ fi
 
 grep -q 'FirstLaunchSetupView' "$ROOT/GAMELIFE/GAMELIFEApp.swift" || fail "First launch setup view missing"
 grep -Fq 'loadDailyQuests() ?? []' "$ROOT/GAMELIFE/Services/GameEngine.swift" || fail "GameEngine should not seed default quests"
-grep -q 'QuestTrackingType.location' "$ROOT/GAMELIFE/Views/Quests/QuestFormSheet.swift" || fail "Quest form missing Address tracking segment"
+grep -q 'case \.location: return "Location"' "$ROOT/GAMELIFE/Views/Quests/QuestFormSheet.swift" || fail "Quest form missing Address tracking segment"
 grep -q 'Text(\"Schedule\")' "$ROOT/GAMELIFE/Views/Quests/QuestFormSheet.swift" || fail "Quest form missing unified schedule section"
 grep -q 'Toggle(\"Enable Reminder\"' "$ROOT/GAMELIFE/Views/Quests/QuestFormSheet.swift" || fail "Quest form missing reminder toggle"
 grep -q 'screenTimeSelectionData' "$ROOT/GAMELIFE/Models/QuestModels.swift" || fail "DailyQuest missing Screen Time selection payload"
