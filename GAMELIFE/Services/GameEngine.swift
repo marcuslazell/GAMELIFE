@@ -1190,37 +1190,45 @@ class GameEngine: ObservableObject {
         var didChange = false
         var defeatedBossIDs: [UUID] = []
 
-        for index in activeBossFights.indices {
-            guard activeBossFights[index].dynamicGoal != nil else { continue }
+        let dynamicBossIDs = activeBossFights
+            .filter { $0.dynamicGoal != nil }
+            .map(\.id)
+
+        for bossID in dynamicBossIDs {
+            guard let snapshotIndex = activeBossFights.firstIndex(where: { $0.id == bossID }) else { continue }
+            let bossSnapshot = activeBossFights[snapshotIndex]
+
             guard let currentValue = await dynamicGoalCurrentValue(
-                for: activeBossFights[index],
+                for: bossSnapshot,
                 healthManager: healthManager,
                 screenTimeManager: screenTimeManager
             ) else {
                 continue
             }
 
-            let wasDefeated = activeBossFights[index].isDefeated
-            let previousHP = activeBossFights[index].currentHP
+            guard let bossIndex = activeBossFights.firstIndex(where: { $0.id == bossID }),
+                  activeBossFights[bossIndex].dynamicGoal != nil else { continue }
 
-            activeBossFights[index].updateDynamicGoalCurrentValue(currentValue)
+            let wasDefeated = activeBossFights[bossIndex].isDefeated
+            let previousHP = activeBossFights[bossIndex].currentHP
 
-            if activeBossFights[index].currentHP != previousHP {
+            activeBossFights[bossIndex].updateDynamicGoalCurrentValue(currentValue)
+
+            if activeBossFights[bossIndex].currentHP != previousHP {
                 didChange = true
             }
 
-            if let generatedQuestID = activeBossFights[index].dynamicGoal?.generatedQuestID,
-               let questIndex = dailyQuests.firstIndex(where: { $0.id == generatedQuestID }) {
-                if dailyQuests[questIndex].trackingType == .manual {
-                    let progress = activeBossFights[index].dynamicGoal?.normalizedProgress ?? 0
-                    dailyQuests[questIndex].currentProgress = progress
-                    dailyQuests[questIndex].status = progress >= 1 ? .completed : .inProgress
-                    didChange = true
-                }
+            if let generatedQuestID = activeBossFights[bossIndex].dynamicGoal?.generatedQuestID,
+               let questIndex = dailyQuests.firstIndex(where: { $0.id == generatedQuestID }),
+               dailyQuests[questIndex].trackingType == .manual {
+                let progress = activeBossFights[bossIndex].dynamicGoal?.normalizedProgress ?? 0
+                dailyQuests[questIndex].currentProgress = progress
+                dailyQuests[questIndex].status = progress >= 1 ? .completed : .inProgress
+                didChange = true
             }
 
-            if activeBossFights[index].isDefeated && !wasDefeated {
-                defeatedBossIDs.append(activeBossFights[index].id)
+            if activeBossFights[bossIndex].isDefeated && !wasDefeated {
+                defeatedBossIDs.append(activeBossFights[bossIndex].id)
             }
         }
 
@@ -1244,23 +1252,31 @@ class GameEngine: ObservableObject {
         QuestManager.shared.checkExtensionCompletions()
         let extensionProgress = QuestManager.shared.getProgressFromExtension()
 
-        for i in dailyQuests.indices {
-            if dailyQuests[i].trackingType == .screenTime {
-                let reportedProgress = extensionProgress[dailyQuests[i].id] ?? 0
-                let sampledProgress = screenTimeManager.checkQuestProgress(for: dailyQuests[i])
-                let progress = max(reportedProgress, sampledProgress)
-                dailyQuests[i].currentProgress = min(progress, 1.0)
+        let screenTimeQuestIDs = dailyQuests
+            .filter { $0.trackingType == .screenTime }
+            .map(\.id)
 
-                if progress >= 1.0 && dailyQuests[i].status != .completed {
-                    let completedTitle = dailyQuests[i].title
-                    let completionResult = completeQuest(dailyQuests[i])
-                    if completionResult.success {
-                        autoCompletedRewards.append((
-                            title: completedTitle,
-                            xp: completionResult.xpAwarded,
-                            gold: completionResult.goldAwarded
-                        ))
-                    }
+        for questID in screenTimeQuestIDs {
+            guard let questIndex = dailyQuests.firstIndex(where: { $0.id == questID }) else { continue }
+            let questSnapshot = dailyQuests[questIndex]
+
+            let reportedProgress = extensionProgress[questID] ?? 0
+            let sampledProgress = screenTimeManager.checkQuestProgress(for: questSnapshot)
+            let progress = max(reportedProgress, sampledProgress)
+
+            guard let latestIndex = dailyQuests.firstIndex(where: { $0.id == questID }) else { continue }
+
+            dailyQuests[latestIndex].currentProgress = min(progress, 1.0)
+
+            if progress >= 1.0 && dailyQuests[latestIndex].status != .completed {
+                let completedTitle = dailyQuests[latestIndex].title
+                let completionResult = completeQuest(dailyQuests[latestIndex])
+                if completionResult.success {
+                    autoCompletedRewards.append((
+                        title: completedTitle,
+                        xp: completionResult.xpAwarded,
+                        gold: completionResult.goldAwarded
+                    ))
                 }
             }
         }
@@ -1333,22 +1349,29 @@ class GameEngine: ObservableObject {
         let healthManager = HealthKitManager.shared
         var autoCompletedRewards: [(title: String, xp: Int, gold: Int)] = []
 
-        for i in dailyQuests.indices {
-            if dailyQuests[i].trackingType == .healthKit {
-                let progress = await healthManager.checkQuestProgress(for: dailyQuests[i])
-                dailyQuests[i].currentProgress = min(progress, 1.0)
+        let healthKitQuestIDs = dailyQuests
+            .filter { $0.trackingType == .healthKit }
+            .map(\.id)
 
-                // Auto-complete if 100%
-                if progress >= 1.0 && dailyQuests[i].status != .completed {
-                    let completedTitle = dailyQuests[i].title
-                    let completionResult = completeQuest(dailyQuests[i])
-                    if completionResult.success {
-                        autoCompletedRewards.append((
-                            title: completedTitle,
-                            xp: completionResult.xpAwarded,
-                            gold: completionResult.goldAwarded
-                        ))
-                    }
+        for questID in healthKitQuestIDs {
+            guard let questIndex = dailyQuests.firstIndex(where: { $0.id == questID }) else { continue }
+            let questSnapshot = dailyQuests[questIndex]
+
+            let progress = await healthManager.checkQuestProgress(for: questSnapshot)
+
+            guard let latestIndex = dailyQuests.firstIndex(where: { $0.id == questID }) else { continue }
+            dailyQuests[latestIndex].currentProgress = min(progress, 1.0)
+
+            // Auto-complete if 100%
+            if progress >= 1.0 && dailyQuests[latestIndex].status != .completed {
+                let completedTitle = dailyQuests[latestIndex].title
+                let completionResult = completeQuest(dailyQuests[latestIndex])
+                if completionResult.success {
+                    autoCompletedRewards.append((
+                        title: completedTitle,
+                        xp: completionResult.xpAwarded,
+                        gold: completionResult.goldAwarded
+                    ))
                 }
             }
         }

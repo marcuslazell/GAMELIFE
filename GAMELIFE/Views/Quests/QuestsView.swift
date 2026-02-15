@@ -29,6 +29,7 @@ struct QuestsView: View {
     @State private var showUndoBanner = false
     @State private var undoBannerTitle = ""
     @State private var undoDismissTask: Task<Void, Never>?
+    @State private var isRefreshingExternalTracking = false
 
     // MARK: - Body
 
@@ -195,7 +196,12 @@ struct QuestsView: View {
         }
     }
 
+    @MainActor
     private func refreshExternalTracking() async {
+        guard !isRefreshingExternalTracking else { return }
+        isRefreshingExternalTracking = true
+        defer { isRefreshingExternalTracking = false }
+
         locationManager.requestSingleLocationRefresh()
         QuestManager.shared.checkExtensionCompletions()
 
