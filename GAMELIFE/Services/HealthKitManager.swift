@@ -35,6 +35,7 @@ class HealthKitManager: ObservableObject {
     @Published var todaySleepHours: Double = 0
     @Published var todayActiveEnergy: Double = 0 // kcal
     @Published var todayWorkoutMinutes: Int = 0
+    @Published var todayWorkoutCount: Int = 0
     @Published var todayStandHours: Int = 0
     @Published var todayMindfulMinutes: Int = 0
     @Published var todayDistanceKM: Double = 0
@@ -175,6 +176,7 @@ class HealthKitManager: ObservableObject {
         async let sleep = fetchTodaySleep()
         async let energy = fetchTodayActiveEnergy()
         async let workouts = fetchTodayWorkoutMinutes()
+        async let workoutCount = fetchTodayWorkoutCount()
         async let mindful = fetchTodayMindfulMinutes()
         async let distance = fetchTodayDistanceKM()
         async let water = fetchTodayWaterGlasses()
@@ -187,6 +189,7 @@ class HealthKitManager: ObservableObject {
             sleepResult,
             energyResult,
             workoutsResult,
+            workoutCountResult,
             mindfulResult,
             distanceResult,
             waterResult,
@@ -198,6 +201,7 @@ class HealthKitManager: ObservableObject {
             sleep,
             energy,
             workouts,
+            workoutCount,
             mindful,
             distance,
             water,
@@ -210,6 +214,7 @@ class HealthKitManager: ObservableObject {
         todaySleepHours = sleepResult
         todayActiveEnergy = energyResult
         todayWorkoutMinutes = workoutsResult
+        todayWorkoutCount = workoutCountResult
         todayMindfulMinutes = mindfulResult
         todayDistanceKM = distanceResult
         todayWaterGlasses = waterResult
@@ -373,6 +378,12 @@ class HealthKitManager: ObservableObject {
         return await fetchWorkoutMinutes(predicate: predicate)
     }
 
+    /// Fetch today's workout count.
+    func fetchTodayWorkoutCount() async -> Int {
+        let predicate = createTodayPredicate()
+        return await fetchWorkoutCount(predicate: predicate)
+    }
+
     /// Fetch workout count for an arbitrary window.
     func fetchWorkoutCount(from startDate: Date, to endDate: Date = Date()) async -> Int {
         let predicate = createPredicate(from: startDate, to: endDate)
@@ -508,8 +519,10 @@ class HealthKitManager: ObservableObject {
         setupObserver(for: HKWorkoutType.workoutType()) { [weak self] in
             Task {
                 let minutes = await self?.fetchTodayWorkoutMinutes() ?? 0
+                let count = await self?.fetchTodayWorkoutCount() ?? 0
                 await MainActor.run {
                     self?.todayWorkoutMinutes = minutes
+                    self?.todayWorkoutCount = count
                     self?.recordSync(event: "Workout data updated")
                 }
                 NotificationCenter.default.post(name: .healthKitDataDidUpdate, object: nil)

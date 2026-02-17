@@ -539,7 +539,11 @@ struct QuestFormSheet: View {
         case .manual:
             Text("You manually mark this quest complete.")
         case .healthKit:
-            Text("Progress auto-tracked with Apple Health (including data synced from Fitness, Strava, Peloton, and more).")
+            if healthKitType == .workoutCount {
+                Text("Auto-completes when Apple Health records workouts from Fitness/Activity, Apple Watch, or synced apps like Strava/Peloton.")
+            } else {
+                Text("Progress auto-tracked with Apple Health (including data synced from Fitness, Strava, Peloton, and more).")
+            }
         case .screenTime:
             if AppFeatureFlags.screenTimeEnabled {
                 Text("Progress auto-tracked with Screen Time APIs.")
@@ -947,7 +951,7 @@ enum HealthKitQuestType: String, CaseIterable {
         case .distance: return "Distance Walked"
         case .activeEnergy: return "Active Calories"
         case .exerciseMinutes: return "Exercise Minutes"
-        case .workoutCount: return "Workout Count"
+        case .workoutCount: return "Workouts (Activity/Fitness)"
         case .standHours: return "Stand Hours"
         case .sleep: return "Sleep"
         case .water: return "Water Intake"

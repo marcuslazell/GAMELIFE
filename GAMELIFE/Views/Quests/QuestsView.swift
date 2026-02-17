@@ -644,7 +644,7 @@ private struct QuestTrackingDiagnosticsRow: View {
         case "HKQuantityTypeIdentifierAppleExerciseTime":
             return Double(healthKitManager.todayWorkoutMinutes)
         case "HKWorkoutType":
-            return quest.targetValue * displayedProgress
+            return Double(healthKitManager.todayWorkoutCount)
         case "HKCategoryTypeIdentifierAppleStandHour":
             return Double(healthKitManager.todayStandHours)
         case "HKCategoryTypeIdentifierSleepAnalysis":

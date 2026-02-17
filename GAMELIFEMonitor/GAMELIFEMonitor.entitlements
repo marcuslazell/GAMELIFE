@@ -7,6 +7,8 @@
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.com.gamelife.shared</string>
+		<string>group.CY-4C94E384-13C9-11E7-AF6C-7BDC6BF6710D.snapchat.picaboo</string>
+		<string>group.CY-76895D00-E4EE-11E6-BB3F-DF1A35B5EABE.lolwtf</string>
 	</array>
 </dict>
 </plist>

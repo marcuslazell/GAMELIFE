@@ -90,15 +90,11 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		905CB43E2F34C57C00529544 /* GAMELIFE */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = GAMELIFE;
 			sourceTree = "<group>";
 		};
 		A10100052F40000100AAA001 /* GAMELIFEMonitor */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = GAMELIFEMonitor;
 			sourceTree = "<group>";
 		};
@@ -141,7 +137,6 @@
 			children = (
 				22EA2DF30689AB7F79973A98 /* Info.plist */,
 			);
-			name = GAMELIFEWatch;
 			path = GAMELIFEWatch;
 			sourceTree = "<group>";
 		};
@@ -153,7 +148,6 @@
 				7A9B8E40ABBAB0723F9384FC /* WatchSessionStore.swift */,
 				64706157F1BF5F3F4DD49D82 /* WatchHomeView.swift */,
 			);
-			name = GAMELIFEWatchExtension;
 			path = GAMELIFEWatchExtension;
 			sourceTree = "<group>";
 		};
@@ -393,7 +387,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.6;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GAMELIFEWatchExtension/Info.plist;
@@ -402,7 +396,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE.watchkitapp.watchkitextension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -417,7 +411,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.6;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GAMELIFEWatch/Info.plist;
@@ -425,7 +419,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -442,7 +436,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.6;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GAMELIFEWatchExtension/Info.plist;
@@ -451,7 +445,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE.watchkitapp.watchkitextension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -591,7 +585,7 @@
 				CODE_SIGN_ENTITLEMENTS = GAMELIFE/GAMELIFE.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.6;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -611,7 +605,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -638,7 +632,7 @@
 				CODE_SIGN_ENTITLEMENTS = GAMELIFE/GAMELIFE.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.6;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -658,7 +652,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -682,7 +676,7 @@
 				CODE_SIGN_ENTITLEMENTS = GAMELIFEMonitor/GAMELIFEMonitor.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.5;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "GAMELIFEMonitor-Info.plist";
@@ -692,7 +686,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE.GAMELIFEMonitor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -709,7 +703,7 @@
 				CODE_SIGN_ENTITLEMENTS = GAMELIFEMonitor/GAMELIFEMonitor.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.5;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "GAMELIFEMonitor-Info.plist";
@@ -719,7 +713,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE.GAMELIFEMonitor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -734,7 +728,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.6;
+				CURRENT_PROJECT_VERSION = 1.65;
 				DEVELOPMENT_TEAM = 3LZ2R96K44;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GAMELIFEWatch/Info.plist;
@@ -742,7 +736,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.65;
 				PRODUCT_BUNDLE_IDENTIFIER = marcshaw.GAMELIFE.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
