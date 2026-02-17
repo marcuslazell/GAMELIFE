@@ -159,13 +159,14 @@ class QuestManager: ObservableObject {
     private func completeQuestFromExtension(questId: UUID) {
         // Find the quest and complete it
         if let quest = GameEngine.shared.dailyQuests.first(where: { $0.id == questId }) {
-            _ = GameEngine.shared.completeQuest(quest, sendSystemNotification: false)
+            let result = GameEngine.shared.completeQuest(quest, sendSystemNotification: false)
+            guard result.success else { return }
 
             // Show system message
             SystemMessageHelper.showQuestComplete(
                 title: quest.title,
-                xp: quest.xpReward,
-                gold: quest.goldReward
+                xp: result.xpAwarded,
+                gold: result.goldAwarded
             )
         }
     }

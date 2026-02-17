@@ -272,6 +272,7 @@ struct DailyQuest: QuestProtocol {
 
     // Daily Quest Specific
     var frequency: QuestFrequency?
+    var isOptional: Bool
     let trackingType: QuestTrackingType
     var currentProgress: Double  // 0.0 to 1.0
     var targetValue: Double      // Target for completion
@@ -326,6 +327,7 @@ struct DailyQuest: QuestProtocol {
         status: QuestStatus = .available,
         targetStats: [StatType],
         frequency: QuestFrequency? = nil,
+        isOptional: Bool = false,
         trackingType: QuestTrackingType = .manual,
         currentProgress: Double = 0.0,
         targetValue: Double = 1.0,
@@ -353,6 +355,7 @@ struct DailyQuest: QuestProtocol {
         self.createdAt = createdAt
 
         self.frequency = frequency
+        self.isOptional = isOptional
         self.trackingType = trackingType
         self.currentProgress = min(1.0, max(0.0, currentProgress))
         self.targetValue = targetValue
@@ -370,6 +373,100 @@ struct DailyQuest: QuestProtocol {
         self.linkedDynamicBossID = linkedDynamicBossID
         self.reminderEnabled = reminderEnabled
         self.reminderTime = reminderTime
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case description
+        case questType
+        case difficulty
+        case status
+        case targetStats
+        case xpReward
+        case goldReward
+        case createdAt
+        case frequency
+        case isOptional
+        case trackingType
+        case currentProgress
+        case targetValue
+        case unit
+        case expiresAt
+        case healthKitIdentifier
+        case screenTimeCategory
+        case screenTimeSelectionData
+        case locationCoordinate
+        case locationAddress
+        case linkedBossID
+        case linkedDynamicBossID
+        case reminderEnabled
+        case reminderTime
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        questType = try container.decodeIfPresent(QuestType.self, forKey: .questType) ?? .daily
+        difficulty = try container.decode(QuestDifficulty.self, forKey: .difficulty)
+        status = try container.decodeIfPresent(QuestStatus.self, forKey: .status) ?? .available
+        targetStats = try container.decodeIfPresent([StatType].self, forKey: .targetStats) ?? []
+        xpReward = try container.decodeIfPresent(Int.self, forKey: .xpReward) ?? GameFormulas.questXP(difficulty: difficulty)
+        goldReward = try container.decodeIfPresent(Int.self, forKey: .goldReward) ?? GameFormulas.questGold(difficulty: difficulty)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+
+        frequency = try container.decodeIfPresent(QuestFrequency.self, forKey: .frequency)
+        isOptional = try container.decodeIfPresent(Bool.self, forKey: .isOptional) ?? false
+        trackingType = try container.decodeIfPresent(QuestTrackingType.self, forKey: .trackingType) ?? .manual
+        currentProgress = min(1.0, max(0.0, try container.decodeIfPresent(Double.self, forKey: .currentProgress) ?? 0))
+        targetValue = try container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 1
+        unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? "times"
+
+        expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
+            ?? (frequency ?? .daily).nextResetDate(from: createdAt)
+
+        healthKitIdentifier = try container.decodeIfPresent(String.self, forKey: .healthKitIdentifier)
+        screenTimeCategory = try container.decodeIfPresent(String.self, forKey: .screenTimeCategory)
+        screenTimeSelectionData = try container.decodeIfPresent(Data.self, forKey: .screenTimeSelectionData)
+        locationCoordinate = try container.decodeIfPresent(LocationCoordinate.self, forKey: .locationCoordinate)
+        locationAddress = try container.decodeIfPresent(String.self, forKey: .locationAddress)
+        linkedBossID = try container.decodeIfPresent(UUID.self, forKey: .linkedBossID)
+        linkedDynamicBossID = try container.decodeIfPresent(UUID.self, forKey: .linkedDynamicBossID)
+        reminderEnabled = try container.decodeIfPresent(Bool.self, forKey: .reminderEnabled) ?? false
+        reminderTime = try container.decodeIfPresent(Date.self, forKey: .reminderTime)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(description, forKey: .description)
+        try container.encode(questType, forKey: .questType)
+        try container.encode(difficulty, forKey: .difficulty)
+        try container.encode(status, forKey: .status)
+        try container.encode(targetStats, forKey: .targetStats)
+        try container.encode(xpReward, forKey: .xpReward)
+        try container.encode(goldReward, forKey: .goldReward)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(frequency, forKey: .frequency)
+        try container.encode(isOptional, forKey: .isOptional)
+        try container.encode(trackingType, forKey: .trackingType)
+        try container.encode(currentProgress, forKey: .currentProgress)
+        try container.encode(targetValue, forKey: .targetValue)
+        try container.encode(unit, forKey: .unit)
+        try container.encode(expiresAt, forKey: .expiresAt)
+        try container.encodeIfPresent(healthKitIdentifier, forKey: .healthKitIdentifier)
+        try container.encodeIfPresent(screenTimeCategory, forKey: .screenTimeCategory)
+        try container.encodeIfPresent(screenTimeSelectionData, forKey: .screenTimeSelectionData)
+        try container.encodeIfPresent(locationCoordinate, forKey: .locationCoordinate)
+        try container.encodeIfPresent(locationAddress, forKey: .locationAddress)
+        try container.encodeIfPresent(linkedBossID, forKey: .linkedBossID)
+        try container.encodeIfPresent(linkedDynamicBossID, forKey: .linkedDynamicBossID)
+        try container.encode(reminderEnabled, forKey: .reminderEnabled)
+        try container.encodeIfPresent(reminderTime, forKey: .reminderTime)
     }
 }
 

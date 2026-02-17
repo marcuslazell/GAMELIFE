@@ -61,10 +61,16 @@ struct SystemMessage: Identifiable, Equatable {
     // MARK: - Static Helpers
 
     static func questCompleted(title: String, xp: Int, gold: Int) -> SystemMessage {
-        SystemMessage(
+        let detail: String
+        if gold > 0 {
+            detail = "\(title) - +\(xp) XP, +\(gold) Gold"
+        } else {
+            detail = "\(title) - +\(xp) XP (optional quest)"
+        }
+        return SystemMessage(
             type: .questComplete,
             title: "Quest Complete",
-            message: "\(title) - +\(xp) XP, +\(gold) Gold"
+            message: detail
         )
     }
 

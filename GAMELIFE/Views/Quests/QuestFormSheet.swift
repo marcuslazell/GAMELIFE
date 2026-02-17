@@ -72,6 +72,7 @@ struct QuestFormSheet: View {
     // Reminders
     @State private var reminderEnabled = false
     @State private var reminderTime = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var isOptionalQuest = false
 
     // UI state
     @State private var isSaving = false
@@ -129,17 +130,28 @@ struct QuestFormSheet: View {
                     .pickerStyle(.menu)
 
                     HStack {
+                        let previewXP = GameFormulas.questXP(difficulty: difficulty)
+                        let previewGold = isOptionalQuest ? 0 : GameFormulas.questGold(difficulty: difficulty)
                         Text("Rewards")
                             .foregroundStyle(SystemTheme.textSecondary)
                         Spacer()
-                        Label("+\(GameFormulas.questXP(difficulty: difficulty))", systemImage: "star.fill")
+                        Label("+\(previewXP)", systemImage: "star.fill")
                             .foregroundStyle(SystemTheme.primaryBlue)
-                        Label("+\(GameFormulas.questGold(difficulty: difficulty))", systemImage: "dollarsign.circle.fill")
-                            .foregroundStyle(SystemTheme.goldColor)
+                        if previewGold > 0 {
+                            Label("+\(previewGold)", systemImage: "dollarsign.circle.fill")
+                                .foregroundStyle(SystemTheme.goldColor)
+                        } else {
+                            Text("XP only")
+                                .foregroundStyle(SystemTheme.textTertiary)
+                        }
                     }
                     .font(SystemTypography.mono(12, weight: .bold))
+
+                    Toggle("Optional Quest (XP only)", isOn: $isOptionalQuest)
                 } header: {
                     Text("Difficulty")
+                } footer: {
+                    Text("Optional quests never deal missed-quest HP damage. Completing them awards XP and stats, but no Gold.")
                 }
 
                 Section {
@@ -581,6 +593,7 @@ struct QuestFormSheet: View {
         unit = quest.unit
         reminderEnabled = quest.reminderEnabled
         reminderTime = quest.reminderTime ?? reminderTime
+        isOptionalQuest = quest.isOptional
         locationAddress = quest.locationAddress ?? ""
         locationCoordinate = quest.locationCoordinate
         locationRadiusMeters = quest.locationCoordinate?.radius ?? 804.67
@@ -679,6 +692,7 @@ struct QuestFormSheet: View {
             status: existingQuest?.status ?? .available,
             targetStats: Array(selectedStats),
             frequency: frequency,
+            isOptional: isOptionalQuest,
             trackingType: resolvedTrackingType,
             currentProgress: existingQuest?.currentProgress ?? 0,
             targetValue: max(1, targetValue),

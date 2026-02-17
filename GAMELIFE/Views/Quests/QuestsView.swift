@@ -394,6 +394,16 @@ struct QuestRowView: View {
                             .background(quest.difficulty.color.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 4))
 
+                        if quest.isOptional {
+                            Text("Optional")
+                                .font(SystemTypography.mono(10, weight: .semibold))
+                                .foregroundStyle(SystemTheme.textSecondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(SystemTheme.backgroundSecondary)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+
                         ForEach(quest.targetStats.prefix(3), id: \.self) { stat in
                             QuestStatIconChip(stat: stat)
                         }
@@ -410,7 +420,8 @@ struct QuestRowView: View {
 
                         QuestRewardSummaryView(
                             xpReward: quest.xpReward,
-                            goldReward: quest.goldReward
+                            goldReward: quest.goldReward,
+                            isOptional: quest.isOptional
                         )
                     }
                     .lineLimit(1)
@@ -667,6 +678,7 @@ private struct QuestTrackingDiagnosticsRow: View {
 private struct QuestRewardSummaryView: View {
     let xpReward: Int
     let goldReward: Int
+    var isOptional: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -680,15 +692,17 @@ private struct QuestRewardSummaryView: View {
             }
             .foregroundStyle(SystemTheme.primaryBlue)
 
-            HStack(spacing: 3) {
-                Image(systemName: "dollarsign.circle.fill")
-                    .font(.system(size: 10))
-                Text("\(goldReward)")
-                    .font(SystemTypography.mono(11, weight: .semibold))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+            if !isOptional {
+                HStack(spacing: 3) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .font(.system(size: 10))
+                    Text("\(goldReward)")
+                        .font(SystemTypography.mono(11, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .foregroundStyle(SystemTheme.goldColor)
             }
-            .foregroundStyle(SystemTheme.goldColor)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.9)

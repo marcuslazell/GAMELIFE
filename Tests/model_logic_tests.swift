@@ -19,6 +19,8 @@ struct ModelLogicTestsMain {
         testScreenTimeQuestSelectionPersistence()
         testQuestFrequencyRollovers()
         testLocationQuestMetadata()
+        testOptionalQuestFlags()
+        testOptionalQuestBackwardCompatibleDecoding()
         testLinkedQuestBossDamage()
         testDynamicBossGoalTypeMetadata()
         testDynamicBossGoalProgressMath()
@@ -138,6 +140,43 @@ struct ModelLogicTestsMain {
         expect(quest.reminderEnabled, "Reminder flag should persist")
         expect(quest.reminderTime == reminderTime, "Reminder time should persist")
         expect(quest.linkedBossID != nil, "Linked boss ID should persist")
+    }
+
+    private static func testOptionalQuestFlags() {
+        let optionalQuest = DailyQuest(
+            title: "Stretch",
+            description: "XP only",
+            difficulty: .easy,
+            targetStats: [.vitality],
+            isOptional: true
+        )
+
+        expect(optionalQuest.isOptional, "Optional flag should persist on DailyQuest")
+    }
+
+    private static func testOptionalQuestBackwardCompatibleDecoding() {
+        let sourceQuest = DailyQuest(
+            title: "Legacy Quest",
+            description: "Legacy payload without optional flag",
+            difficulty: .normal,
+            targetStats: [.intelligence],
+            trackingType: .manual
+        )
+
+        do {
+            let encoded = try JSONEncoder().encode(sourceQuest)
+            guard var jsonObject = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+                expect(false, "Failed to parse encoded quest JSON")
+                return
+            }
+            jsonObject.removeValue(forKey: "isOptional")
+            let legacyData = try JSONSerialization.data(withJSONObject: jsonObject)
+
+            let decoded = try JSONDecoder().decode(DailyQuest.self, from: legacyData)
+            expect(decoded.isOptional == false, "Legacy quests without isOptional key should default to false")
+        } catch {
+            expect(false, "Legacy quest decode should not fail: \(error)")
+        }
     }
 
     private static func testLinkedQuestBossDamage() {

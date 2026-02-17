@@ -126,7 +126,7 @@ class GameEngine: ObservableObject {
         let streakMultiplier = GameFormulas.streakMultiplier(streak: player.currentStreak)
         let baseXP = completedQuest.xpReward
         let finalXP = Int(Double(baseXP) * streakMultiplier)
-        let gold = completedQuest.goldReward
+        let gold = completedQuest.isOptional ? 0 : completedQuest.goldReward
 
         // Check for critical success (loot box chance)
         let isCritical = Double.random(in: 0...1) < GameFormulas.criticalSuccessChance
@@ -142,8 +142,10 @@ class GameEngine: ObservableObject {
         // Award XP
         let leveledUp = awardXP(finalXP)
 
-        // Award gold
-        player.gold += gold
+        // Award gold for non-optional quests only
+        if gold > 0 {
+            player.gold += gold
+        }
 
         // Award stat XP
         for statType in completedQuest.targetStats {
@@ -156,7 +158,7 @@ class GameEngine: ObservableObject {
         logActivity(
             type: .questCompleted,
             title: completedQuest.title,
-            detail: "+\(finalXP) XP • +\(gold) Gold"
+            detail: gold > 0 ? "+\(finalXP) XP • +\(gold) Gold" : "+\(finalXP) XP • Optional quest (XP only)"
         )
 
         // Always emit a system notification for completed quests so users get
@@ -700,7 +702,7 @@ class GameEngine: ObservableObject {
 
     /// Check and update daily quest streak
     private func checkDailyQuestStreak() {
-        let dailyCycleQuests = dailyQuests.filter { $0.resolvedFrequency == .daily }
+        let dailyCycleQuests = dailyQuests.filter { $0.resolvedFrequency == .daily && !$0.isOptional }
         guard !dailyCycleQuests.isEmpty else { return }
 
         let completedCount = dailyCycleQuests.filter { $0.status == .completed }.count
@@ -749,7 +751,7 @@ class GameEngine: ObservableObject {
         var missedQuestCount = 0
         for index in dailyQuests.indices {
             while referenceDate >= dailyQuests[index].expiresAt {
-                if dailyQuests[index].status != .completed {
+                if dailyQuests[index].status != .completed && !dailyQuests[index].isOptional {
                     missedQuestCount += 1
                 }
                 dailyQuests[index].status = .available
@@ -1312,6 +1314,7 @@ class GameEngine: ObservableObject {
                 status: quest.status,
                 targetStats: quest.targetStats,
                 frequency: quest.frequency,
+                isOptional: quest.isOptional,
                 trackingType: .manual,
                 currentProgress: quest.currentProgress,
                 targetValue: quest.targetValue,

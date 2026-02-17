@@ -180,7 +180,7 @@ class NotificationManager: NSObject, ObservableObject {
 
     /// Send completion feedback either immediately or as a short digest, based on user preference.
     func sendQuestCompletionNotification(questTitle: String, xp: Int, gold: Int) {
-        let messageBody = "\(questTitle) finished. +\(xp) XP, +\(gold) Gold."
+        let messageBody = questCompletionBody(title: questTitle, xp: xp, gold: gold)
 
         switch questCompletionNotificationMode {
         case .immediate:
@@ -238,9 +238,11 @@ class NotificationManager: NSObject, ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = "[SYSTEM] Quest Digest"
         if queue.count == 1, let only = queue.first {
-            content.body = "\(only.title) completed. +\(only.xp) XP, +\(only.gold) Gold."
+            content.body = questCompletionBody(title: only.title, xp: only.xp, gold: only.gold)
         } else {
-            content.body = "\(queue.count) quests completed • +\(totalXP) XP • +\(totalGold) Gold."
+            content.body = totalGold > 0
+                ? "\(queue.count) quests completed • +\(totalXP) XP • +\(totalGold) Gold."
+                : "\(queue.count) quests completed • +\(totalXP) XP (optional quests grant XP only)."
         }
         content.sound = .default
         content.categoryIdentifier = "QUEST_COMPLETE"
@@ -278,6 +280,13 @@ class NotificationManager: NSObject, ObservableObject {
         UserDefaults.standard.removeObject(forKey: digestWindowStartedAtStoreKey)
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [digestNotificationIdentifier])
         updateQueuedDigestCount()
+    }
+
+    private func questCompletionBody(title: String, xp: Int, gold: Int) -> String {
+        if gold > 0 {
+            return "\(title) finished. +\(xp) XP, +\(gold) Gold."
+        }
+        return "\(title) finished. +\(xp) XP (optional quest: no gold)."
     }
 
     private func updateQueuedDigestCount() {
