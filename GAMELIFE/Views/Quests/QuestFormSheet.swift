@@ -129,23 +129,31 @@ struct QuestFormSheet: View {
                     }
                     .pickerStyle(.menu)
 
-                    HStack {
-                        let previewXP = GameFormulas.questXP(difficulty: difficulty)
-                        let previewGold = isOptionalQuest ? 0 : GameFormulas.questGold(difficulty: difficulty)
-                        Text("Rewards")
-                            .foregroundStyle(SystemTheme.textSecondary)
-                        Spacer()
-                        Label("+\(previewXP)", systemImage: "star.fill")
-                            .foregroundStyle(SystemTheme.primaryBlue)
-                        if previewGold > 0 {
-                            Label("+\(previewGold)", systemImage: "dollarsign.circle.fill")
-                                .foregroundStyle(SystemTheme.goldColor)
-                        } else {
-                            Text("XP only")
-                                .foregroundStyle(SystemTheme.textTertiary)
+                    VStack(spacing: 10) {
+                        HStack {
+                            let previewXP = GameFormulas.questXP(difficulty: difficulty)
+                            let previewGold = isOptionalQuest ? 0 : GameFormulas.questGold(difficulty: difficulty)
+
+                            Text("Rewards")
+                                .font(SystemTypography.body)
+                                .foregroundStyle(SystemTheme.textPrimary)
+                            Spacer()
+                            Label("+\(previewXP)", systemImage: "star.fill")
+                                .font(SystemTypography.mono(16, weight: .semibold))
+                                .foregroundStyle(SystemTheme.primaryBlue)
+                            if previewGold > 0 {
+                                Label("+\(previewGold)", systemImage: "dollarsign.circle.fill")
+                                    .font(SystemTypography.mono(16, weight: .semibold))
+                                    .foregroundStyle(SystemTheme.goldColor)
+                            } else {
+                                Text("XP only")
+                                    .font(SystemTypography.caption)
+                                    .foregroundStyle(SystemTheme.textTertiary)
+                            }
                         }
+
+                        Divider()
                     }
-                    .font(SystemTypography.mono(12, weight: .bold))
 
                     Toggle("Optional Quest (XP only)", isOn: $isOptionalQuest)
                 } header: {
