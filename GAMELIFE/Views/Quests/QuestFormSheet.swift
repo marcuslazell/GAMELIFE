@@ -402,9 +402,20 @@ struct QuestFormSheet: View {
             }
 
         case .location:
-            TextField("Address (e.g. 1 Infinite Loop, Cupertino)", text: $locationAddress)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Address")
+                    .font(SystemTypography.caption)
+                    .foregroundStyle(SystemTheme.textSecondary)
+
+                TextField(
+                    "e.g. 1 Infinite Loop, Cupertino",
+                    text: $locationAddress,
+                    axis: .vertical
+                )
+                .lineLimit(2...3)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
+            }
 
             if addressAutocomplete.isSearching {
                 HStack(spacing: 8) {
@@ -604,9 +615,14 @@ struct QuestFormSheet: View {
         isOptionalQuest = quest.isOptional
         locationAddress = quest.locationAddress ?? ""
         locationCoordinate = quest.locationCoordinate
-        locationRadiusMeters = quest.locationCoordinate?.radius ?? 804.67
+            ?? QuestDataManager.shared.cachedValidatedLocation(forQuestID: quest.id)
+            ?? QuestDataManager.shared.cachedValidatedLocation(for: locationAddress)
+        locationRadiusMeters = locationCoordinate?.radius ?? 804.67
         if let savedCoordinate = quest.locationCoordinate {
             locationValidationMessage = "Address validated: \(savedCoordinate.locationName)"
+            locationValidationIsError = false
+        } else if let restoredCoordinate = locationCoordinate {
+            locationValidationMessage = "Using saved validated address: \(restoredCoordinate.locationName)"
             locationValidationIsError = false
         }
 
@@ -638,6 +654,7 @@ struct QuestFormSheet: View {
         defer { isSaving = false }
 
         let existingQuest = mode.existingQuest
+        let questID = existingQuest?.id ?? UUID()
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAddress = locationAddress.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -654,6 +671,8 @@ struct QuestFormSheet: View {
                 baseCoordinate = existingCoordinate
             } else if let validatedCoordinate = locationCoordinate {
                 baseCoordinate = validatedCoordinate
+            } else if let cachedCoordinate = QuestDataManager.shared.cachedValidatedLocation(for: trimmedAddress) {
+                baseCoordinate = cachedCoordinate
             } else if let resolved = await resolveAddressWithAppleMaps(trimmedAddress) {
                 baseCoordinate = resolved
             } else {
@@ -672,12 +691,18 @@ struct QuestFormSheet: View {
                 radius: locationRadiusMeters,
                 locationName: baseCoordinate.locationName
             )
+            if let resolvedCoordinate {
+                QuestDataManager.shared.cacheValidatedLocation(
+                    resolvedCoordinate,
+                    forQuestID: existingQuest?.id ?? questID,
+                    address: trimmedAddress
+                )
+            }
         } else {
             resolvedCoordinate = nil
         }
 
         let now = Date()
-        let questID = existingQuest?.id ?? UUID()
         let resolvedTrackingType: QuestTrackingType =
             (!AppFeatureFlags.screenTimeEnabled && trackingType == .screenTime) ? .manual : trackingType
         let previousFrequency = existingQuest?.resolvedFrequency
@@ -740,9 +765,19 @@ struct QuestFormSheet: View {
                 radius: locationRadiusMeters,
                 locationName: resolved.locationName
             )
+            // Lock text to a canonical address string so repeated edits/reopens
+            // do not jitter between equivalent Apple Maps labels.
+            locationAddress = resolved.locationName
             locationValidationMessage = "Validated: \(resolved.locationName)"
             locationValidationIsError = false
             addressAutocomplete.clear()
+            if let coordinate = locationCoordinate {
+                QuestDataManager.shared.cacheValidatedLocation(
+                    coordinate,
+                    forQuestID: mode.existingQuest?.id,
+                    address: resolved.locationName
+                )
+            }
         } else {
             locationCoordinate = nil
             locationValidationMessage = "Address not found. Try a complete address (street, city, state)."
@@ -782,16 +817,12 @@ struct QuestFormSheet: View {
                     return
                 }
 
-                let resolvedName = [
-                    item.name,
-                    item.placemark.title
-                ]
-                .compactMap { $0 }
-                .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? address
+                let stableCoordinate = stabilizedCoordinate(coordinate)
+                let resolvedName = normalizedAddressName(from: item.placemark, fallback: address)
 
                 continuation.resume(returning: LocationCoordinate(
-                    latitude: coordinate.latitude,
-                    longitude: coordinate.longitude,
+                    latitude: stableCoordinate.latitude,
+                    longitude: stableCoordinate.longitude,
                     radius: 804.67, // ~0.5 miles
                     locationName: resolvedName
                 ))
@@ -808,17 +839,12 @@ struct QuestFormSheet: View {
                     return
                 }
 
-                let resolvedName = [
-                    placemark.name,
-                    placemark.locality,
-                    placemark.administrativeArea
-                ]
-                .compactMap { $0 }
-                .joined(separator: ", ")
+                let stableCoordinate = stabilizedCoordinate(coordinate)
+                let resolvedName = normalizedAddressName(from: placemark, fallback: address)
 
                 continuation.resume(returning: LocationCoordinate(
-                    latitude: coordinate.latitude,
-                    longitude: coordinate.longitude,
+                    latitude: stableCoordinate.latitude,
+                    longitude: stableCoordinate.longitude,
                     radius: 804.67, // ~0.5 miles
                     locationName: resolvedName.isEmpty ? address : resolvedName
                 ))
@@ -876,6 +902,44 @@ struct QuestFormSheet: View {
         let mapItem = MKMapItem(placemark: placemark)
         mapItem.name = coordinate.locationName
         mapItem.openInMaps()
+    }
+
+    private func stabilizedCoordinate(_ coordinate: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        CLLocationCoordinate2D(
+            latitude: roundedCoordinate(coordinate.latitude),
+            longitude: roundedCoordinate(coordinate.longitude)
+        )
+    }
+
+    private func roundedCoordinate(_ value: Double, decimals: Int = 5) -> Double {
+        let scale = pow(10.0, Double(decimals))
+        return (value * scale).rounded() / scale
+    }
+
+    private func normalizedAddressName(from placemark: CLPlacemark, fallback: String) -> String {
+        let line1 = [placemark.subThoroughfare, placemark.thoroughfare]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        let line2 = [placemark.locality, placemark.administrativeArea, placemark.postalCode]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+
+        let full = [line1, line2]
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+
+        if !full.isEmpty {
+            return full
+        }
+
+        if let title = placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return title
+        }
+
+        return fallback
     }
 }
 

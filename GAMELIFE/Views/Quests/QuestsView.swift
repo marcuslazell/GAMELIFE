@@ -200,25 +200,32 @@ struct QuestsView: View {
     private func refreshExternalTracking() async {
         guard !isRefreshingExternalTracking else { return }
         isRefreshingExternalTracking = true
-        defer { isRefreshingExternalTracking = false }
+        defer {
+            // Ensure pull-to-refresh always exits promptly, even if a provider stalls.
+            isRefreshingExternalTracking = false
+        }
 
         locationManager.requestSingleLocationRefresh()
         QuestManager.shared.checkExtensionCompletions()
 
-        if healthKitManager.isAuthorized {
-            await healthKitManager.refreshTodayData()
+        Task { @MainActor in
+            if healthKitManager.isAuthorized {
+                await healthKitManager.refreshTodayData()
+            }
+            await gameEngine.updateHealthKitQuests()
+            gameEngine.save()
         }
 
-        if AppFeatureFlags.screenTimeEnabled && screenTimeManager.isAuthorized {
-            screenTimeManager.refreshAuthorizationStatus()
-            screenTimeManager.startUsageMonitoring()
-        }
-
-        await gameEngine.updateHealthKitQuests()
         if AppFeatureFlags.screenTimeEnabled {
-            await gameEngine.updateScreenTimeQuests()
+            Task { @MainActor in
+                if screenTimeManager.isAuthorized {
+                    screenTimeManager.refreshAuthorizationStatus()
+                    screenTimeManager.startUsageMonitoring()
+                }
+                await gameEngine.updateScreenTimeQuests()
+                gameEngine.save()
+            }
         }
-        gameEngine.save()
     }
 }
 
@@ -524,7 +531,7 @@ private struct LocationTrackingStatusRow: View {
         case .completed:
             return ("checkmark.seal.fill", "Completed today", SystemTheme.successGreen)
         case .permissionRequired:
-            return ("location.slash.fill", "Location permission required", SystemTheme.warningOrange)
+            return ("location.slash.fill", "Allow Always Location for background tracking", SystemTheme.warningOrange)
         case .invalidAddress:
             return ("mappin.slash", "Address needs validation", SystemTheme.warningOrange)
         case .monitoringUnavailable:
@@ -532,7 +539,7 @@ private struct LocationTrackingStatusRow: View {
         case .notMonitoring:
             return ("antenna.radiowaves.left.and.right.slash", "Tracking not active", SystemTheme.textTertiary)
         case .monitoring(let locationName):
-            return ("location.circle.fill", "Tracking active near \(locationName)", SystemTheme.primaryBlue)
+            return ("location.circle.fill", "Tracking near \(compactLocation(locationName))", SystemTheme.primaryBlue)
         case .inRange(let minutes, let requiredMinutes):
             return ("timer.circle.fill", "In range \(minutes)/\(requiredMinutes) min", SystemTheme.successGreen)
         }
@@ -548,6 +555,14 @@ private struct LocationTrackingStatusRow: View {
                 .minimumScaleFactor(0.85)
         }
         .foregroundStyle(details.color)
+    }
+
+    private func compactLocation(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= 28 {
+            return trimmed
+        }
+        return String(trimmed.prefix(27)) + "…"
     }
 }
 
@@ -604,19 +619,18 @@ private struct QuestTrackingDiagnosticsRow: View {
 
         case .location:
             let syncText = relativeTimestamp(locationManager.lastTrackingEventDate)
-            let eventText = locationManager.lastTrackingEventMessage
             let status = locationManager.questTrackingStatus(for: quest)
             switch status {
             case .permissionRequired:
-                return ("location.slash.fill", "Location permission required. Tracking inactive.", SystemTheme.warningOrange)
+                return ("location.slash.fill", "Allow Always Location to keep auto-complete active in background.", SystemTheme.warningOrange)
             case .invalidAddress:
                 return ("mappin.slash", "Address not validated. Edit and validate with Apple Maps.", SystemTheme.warningOrange)
             case .notMonitoring:
                 return ("antenna.radiowaves.left.and.right.slash", "Geofence not active yet. Re-save quest to start tracking.", SystemTheme.textTertiary)
             case .monitoring(let place):
-                return ("location.circle.fill", "Monitoring \(place) • Last event \(syncText) • \(eventText)", SystemTheme.primaryBlue)
+                return ("location.circle.fill", "Monitoring \(compactLocation(place)) • Synced \(syncText)", SystemTheme.primaryBlue)
             case .inRange(let minutes, let required):
-                return ("timer.circle.fill", "In range \(minutes)/\(required) min • Last event \(syncText) • \(eventText)", SystemTheme.successGreen)
+                return ("timer.circle.fill", "In range \(minutes)/\(required) min • Synced \(syncText)", SystemTheme.successGreen)
             case .completed:
                 return ("checkmark.seal.fill", "Location objective completed.", SystemTheme.successGreen)
             case .monitoringUnavailable:
@@ -672,6 +686,14 @@ private struct QuestTrackingDiagnosticsRow: View {
     private func relativeTimestamp(_ date: Date?) -> String {
         guard let date else { return "never" }
         return date.formatted(.relative(presentation: .named))
+    }
+
+    private func compactLocation(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= 30 {
+            return trimmed
+        }
+        return String(trimmed.prefix(29)) + "…"
     }
 }
 

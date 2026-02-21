@@ -96,11 +96,17 @@ class QuestDataManager {
     private let bossFightsKey = "gamelife_boss_fights"
     private let completedQuestsKey = "gamelife_completed_quests"
     private let questHistoryKey = "gamelife_quest_history"
+    private let validatedLocationCacheKey = "gamelife_validated_location_cache"
 
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     private init() {}
+
+    private struct ValidatedLocationCache: Codable {
+        var byQuestID: [String: LocationCoordinate] = [:]
+        var byAddress: [String: LocationCoordinate] = [:]
+    }
 
     // MARK: - Daily Quests
 
@@ -109,6 +115,7 @@ class QuestDataManager {
         do {
             let data = try encoder.encode(quests)
             UserDefaults.standard.set(data, forKey: dailyQuestsKey)
+            persistValidatedLocationCache(from: quests)
         } catch {
             print("[SYSTEM] Failed to save daily quests: \(error)")
         }
@@ -121,11 +128,46 @@ class QuestDataManager {
         }
 
         do {
-            return try decoder.decode([DailyQuest].self, from: data)
+            var quests = try decoder.decode([DailyQuest].self, from: data)
+            let repairedCount = restoreValidatedLocationsIfNeeded(in: &quests)
+            if repairedCount > 0 {
+                do {
+                    let repairedData = try encoder.encode(quests)
+                    UserDefaults.standard.set(repairedData, forKey: dailyQuestsKey)
+                } catch {
+                    print("[SYSTEM] Failed to persist repaired location quests: \(error)")
+                }
+                print("[SYSTEM] Restored \(repairedCount) validated location quest(s) from cache")
+            }
+            return quests
         } catch {
             print("[SYSTEM] Failed to load daily quests: \(error)")
             return nil
         }
+    }
+
+    func cachedValidatedLocation(for address: String) -> LocationCoordinate? {
+        let normalized = normalizeAddress(address)
+        guard !normalized.isEmpty else { return nil }
+        return loadValidatedLocationCache().byAddress[normalized]
+    }
+
+    func cachedValidatedLocation(forQuestID questID: UUID) -> LocationCoordinate? {
+        loadValidatedLocationCache().byQuestID[questID.uuidString]
+    }
+
+    func cacheValidatedLocation(_ coordinate: LocationCoordinate, forQuestID questID: UUID?, address: String?) {
+        var cache = loadValidatedLocationCache()
+        if let questID {
+            cache.byQuestID[questID.uuidString] = coordinate
+        }
+        if let address {
+            let normalized = normalizeAddress(address)
+            if !normalized.isEmpty {
+                cache.byAddress[normalized] = coordinate
+            }
+        }
+        saveValidatedLocationCache(cache)
     }
 
     /// Reset daily quests (called at midnight)
@@ -145,6 +187,83 @@ class QuestDataManager {
         } catch {
             print("[SYSTEM] Failed to save boss fights: \(error)")
         }
+    }
+
+    private func persistValidatedLocationCache(from quests: [DailyQuest]) {
+        var cache = loadValidatedLocationCache()
+
+        for quest in quests where quest.trackingType == .location {
+            guard let coordinate = quest.locationCoordinate else { continue }
+
+            cache.byQuestID[quest.id.uuidString] = coordinate
+
+            if let address = quest.locationAddress {
+                let normalized = normalizeAddress(address)
+                if !normalized.isEmpty {
+                    cache.byAddress[normalized] = coordinate
+                }
+            }
+
+            let canonicalName = normalizeAddress(coordinate.locationName)
+            if !canonicalName.isEmpty {
+                cache.byAddress[canonicalName] = coordinate
+            }
+        }
+
+        saveValidatedLocationCache(cache)
+    }
+
+    private func restoreValidatedLocationsIfNeeded(in quests: inout [DailyQuest]) -> Int {
+        let cache = loadValidatedLocationCache()
+        var restoredCount = 0
+
+        for index in quests.indices where quests[index].trackingType == .location && quests[index].locationCoordinate == nil {
+            let questIDKey = quests[index].id.uuidString
+            if let byID = cache.byQuestID[questIDKey] {
+                quests[index].locationCoordinate = byID
+                restoredCount += 1
+                continue
+            }
+
+            guard let address = quests[index].locationAddress else { continue }
+            let normalized = normalizeAddress(address)
+            guard !normalized.isEmpty else { continue }
+            if let byAddress = cache.byAddress[normalized] {
+                quests[index].locationCoordinate = byAddress
+                restoredCount += 1
+            }
+        }
+
+        return restoredCount
+    }
+
+    private func loadValidatedLocationCache() -> ValidatedLocationCache {
+        guard let data = UserDefaults.standard.data(forKey: validatedLocationCacheKey) else {
+            return ValidatedLocationCache()
+        }
+        do {
+            return try decoder.decode(ValidatedLocationCache.self, from: data)
+        } catch {
+            return ValidatedLocationCache()
+        }
+    }
+
+    private func saveValidatedLocationCache(_ cache: ValidatedLocationCache) {
+        do {
+            let data = try encoder.encode(cache)
+            UserDefaults.standard.set(data, forKey: validatedLocationCacheKey)
+        } catch {
+            print("[SYSTEM] Failed to save validated location cache: \(error)")
+        }
+    }
+
+    private func normalizeAddress(_ raw: String) -> String {
+        raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     /// Load boss fights
@@ -342,6 +461,7 @@ class SettingsManager {
         static let autoTrackHealthKit = "autoTrackHealthKit"
         static let autoTrackScreenTime = "autoTrackScreenTime"
         static let autoTrackLocation = "autoTrackLocation"
+        static let deathMechanicEnabled = "deathMechanicEnabled"
     }
 
     // MARK: - Onboarding
@@ -408,6 +528,11 @@ class SettingsManager {
         set { UserDefaults.standard.set(newValue, forKey: Keys.autoTrackLocation) }
     }
 
+    var deathMechanicEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: Keys.deathMechanicEnabled) }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.deathMechanicEnabled) }
+    }
+
     // MARK: - Reset
 
     func resetAllSettings() {
@@ -423,7 +548,8 @@ class SettingsManager {
             Keys.streakAlertsEnabled: true,
             Keys.autoTrackHealthKit: false,  // Disabled by default - requires Info.plist setup
             Keys.autoTrackScreenTime: false, // Disabled by default - requires entitlement
-            Keys.autoTrackLocation: false    // Disabled by default - requires Info.plist setup
+            Keys.autoTrackLocation: false,   // Disabled by default - requires Info.plist setup
+            Keys.deathMechanicEnabled: true
         ]
 
         UserDefaults.standard.register(defaults: defaults)

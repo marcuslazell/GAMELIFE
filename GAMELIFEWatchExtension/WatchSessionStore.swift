@@ -33,13 +33,8 @@ final class WatchSessionStore: NSObject, ObservableObject {
 
         session.delegate = self
         session.activate()
-        applySessionState(from: session)
-
-        if let contextData = session.receivedApplicationContext[snapshotContextKey] as? Data {
-            applySnapshotData(contextData, source: "application context")
-        }
-
-        refreshSnapshot()
+        isSessionSupported = true
+        statusMessage = "Activating session..."
     }
 
     func refreshSnapshot() {
@@ -131,6 +126,10 @@ final class WatchSessionStore: NSObject, ObservableObject {
 
     private func applySessionState(from session: WCSession) {
         isSessionSupported = WCSession.isSupported()
+        guard session.activationState == .activated else {
+            isReachable = false
+            return
+        }
         isReachable = session.isReachable
     }
 }

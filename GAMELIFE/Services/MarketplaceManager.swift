@@ -90,6 +90,14 @@ class MarketplaceManager: ObservableObject {
                 icon: "cup.and.saucer"
             ),
             MarketplaceReward(
+                name: "Health Potion",
+                description: "Restore +25 HP instantly.",
+                cost: 35,
+                category: .item,
+                icon: "cross.case.fill",
+                healthRestore: 25
+            ),
+            MarketplaceReward(
                 name: "Movie Night",
                 description: "Watch a full movie of your choice.",
                 cost: 150,
@@ -171,16 +179,54 @@ class MarketplaceManager: ObservableObject {
             )
         }
 
+        if let healthRestore = reward.healthRestore, healthRestore > 0, player.currentHP >= player.maxHP {
+            return PurchaseResult(
+                success: false,
+                message: "HP is already full. Use this when you need healing."
+            )
+        }
+
         // Deduct gold
         player.gold -= reward.cost
 
         // Create purchase record
-        let purchase = RewardPurchase(
+        var purchase = RewardPurchase(
             reward: reward,
             purchaseDate: Date()
         )
 
         purchaseHistory.append(purchase)
+
+        if let healthRestore = reward.healthRestore, healthRestore > 0 {
+            let hpBefore = player.currentHP
+            player.currentHP = min(player.maxHP, player.currentHP + healthRestore)
+            let restoredAmount = max(0, player.currentHP - hpBefore)
+
+            purchase.isRedeemed = true
+            purchase.redeemedDate = Date()
+            if let historyIndex = purchaseHistory.firstIndex(where: { $0.id == purchase.id }) {
+                purchaseHistory[historyIndex] = purchase
+            }
+
+            savePurchaseHistory()
+
+            GameEngine.shared.recordExternalActivity(
+                type: .rewardConsumed,
+                title: reward.name,
+                detail: restoredAmount > 0
+                    ? "+\(restoredAmount) HP restored"
+                    : "HP already full"
+            )
+
+            return PurchaseResult(
+                success: true,
+                message: restoredAmount > 0
+                    ? "Health restored by \(restoredAmount) HP."
+                    : "HP is already full.",
+                purchase: purchase
+            )
+        }
+
         unredeemedRewards.append(purchase)
 
         // Save
@@ -303,6 +349,7 @@ struct MarketplaceReward: Codable, Identifiable {
     let category: RewardCategory
     let icon: String
     var isCustom: Bool
+    var healthRestore: Int?
 
     init(
         name: String,
@@ -310,7 +357,8 @@ struct MarketplaceReward: Codable, Identifiable {
         cost: Int,
         category: RewardCategory,
         icon: String,
-        isCustom: Bool = false
+        isCustom: Bool = false,
+        healthRestore: Int? = nil
     ) {
         self.id = UUID()
         self.name = name
@@ -319,6 +367,7 @@ struct MarketplaceReward: Codable, Identifiable {
         self.category = category
         self.icon = icon
         self.isCustom = isCustom
+        self.healthRestore = healthRestore
     }
 }
 

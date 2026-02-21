@@ -22,11 +22,14 @@ class LocationManager: NSObject, ObservableObject {
     private let locationManager = CLLocationManager()
     private var geofenceRegions: [CLCircularRegion] = []
     private var regionEntryTimes: [String: Date] = [:]
+    private var lastPublishedLocation: CLLocation?
+    private var lastManualRefreshRequestDate: Date?
 
     // MARK: - Published Properties
 
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var isAuthorized = false
+    @Published var hasBackgroundAuthorization = false
     @Published var currentLocation: CLLocation?
     @Published var activeGeofences: [TrackedLocation] = []
     @Published var lastTrackingEventDate: Date?
@@ -41,11 +44,11 @@ class LocationManager: NSObject, ObservableObject {
     private override init() {
         super.init()
         locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        // Keep foreground-only updates to avoid CoreLocation background assertions
-        // when the app has not declared background location mode.
+        locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        locationManager.distanceFilter = 25
         locationManager.allowsBackgroundLocationUpdates = false
         locationManager.pausesLocationUpdatesAutomatically = false
+        locationManager.showsBackgroundLocationIndicator = false
         locationManager.activityType = .fitness
 
         checkAuthorizationStatus()
@@ -55,27 +58,54 @@ class LocationManager: NSObject, ObservableObject {
     // MARK: - Authorization
 
     func requestAuthorization() {
-        locationManager.requestWhenInUseAuthorization()
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse:
+            // Escalate to Always to keep location-based quests reliable in background.
+            locationManager.requestAlwaysAuthorization()
+        default:
+            break
+        }
     }
 
     /// Trigger an on-demand location refresh (used by pull-to-refresh in Quests).
     func requestSingleLocationRefresh() {
         guard isAuthorized else { return }
+        if let lastRequest = lastManualRefreshRequestDate,
+           Date().timeIntervalSince(lastRequest) < 3 {
+            return
+        }
+        lastManualRefreshRequestDate = Date()
         locationManager.requestLocation()
     }
 
     private func checkAuthorizationStatus() {
         authorizationStatus = locationManager.authorizationStatus
         isAuthorized = authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse
+        hasBackgroundAuthorization = authorizationStatus == .authorizedAlways
     }
 
     private func startLocationUpdatesIfAuthorized() {
         guard isAuthorized else {
+            locationManager.allowsBackgroundLocationUpdates = false
+            locationManager.showsBackgroundLocationIndicator = false
             locationManager.stopUpdatingLocation()
+            locationManager.stopMonitoringSignificantLocationChanges()
             return
         }
 
-        locationManager.startUpdatingLocation()
+        configureBackgroundLocationUpdates()
+        if activeGeofences.isEmpty {
+            locationManager.stopUpdatingLocation()
+        } else {
+            locationManager.startUpdatingLocation()
+        }
+        if authorizationStatus == .authorizedAlways {
+            locationManager.startMonitoringSignificantLocationChanges()
+        } else {
+            locationManager.stopMonitoringSignificantLocationChanges()
+        }
     }
 
     // MARK: - Geofencing
@@ -117,6 +147,7 @@ class LocationManager: NSObject, ObservableObject {
         locationManager.startMonitoring(for: region)
         geofenceRegions.append(region)
         recordTrackingEvent("Geofence active: \(location.name)")
+        startLocationUpdatesIfAuthorized()
 
         print("[SYSTEM] Geofence added: \(location.name)")
     }
@@ -177,6 +208,7 @@ class LocationManager: NSObject, ObservableObject {
             geofenceRegions.removeAll { $0.identifier == location.id.uuidString }
             activeGeofences.removeAll { $0.id == location.id }
             recordTrackingEvent("Geofence removed: \(location.name)")
+            startLocationUpdatesIfAuthorized()
         }
     }
 
@@ -188,6 +220,7 @@ class LocationManager: NSObject, ObservableObject {
         geofenceRegions.removeAll()
         activeGeofences.removeAll()
         regionEntryTimes.removeAll()
+        startLocationUpdatesIfAuthorized()
     }
 
     // MARK: - Visit Tracking
@@ -334,10 +367,15 @@ class LocationManager: NSObject, ObservableObject {
 
 extension LocationManager: CLLocationManagerDelegate {
 
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        locationManager(manager, didChangeAuthorization: manager.authorizationStatus)
+    }
+
     nonisolated func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         Task { @MainActor in
             self.authorizationStatus = status
             self.isAuthorized = status == .authorizedAlways || status == .authorizedWhenInUse
+            self.hasBackgroundAuthorization = status == .authorizedAlways
             self.startLocationUpdatesIfAuthorized()
 
             if self.isAuthorized {
@@ -355,8 +393,34 @@ extension LocationManager: CLLocationManagerDelegate {
         guard let location = locations.last else { return }
 
         Task { @MainActor in
-            self.currentLocation = location
+            if self.shouldPublishLocation(location) {
+                self.currentLocation = location
+                self.lastPublishedLocation = location
+            }
             await self.evaluateActiveGeofenceVisits(at: location)
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in
+            let nsError = error as NSError
+            if nsError.domain == kCLErrorDomain {
+                // kCLErrorDomain code 0 (locationUnknown) is transient and noisy,
+                // especially in simulator / temporary GPS stalls.
+                if nsError.code == CLError.locationUnknown.rawValue || nsError.code == 0 {
+                    return
+                }
+
+                if nsError.code == CLError.denied.rawValue {
+                    self.recordTrackingEvent("Location permission denied.")
+                    return
+                }
+            }
+
+            // requestLocation() requires this delegate path; handle it gracefully
+            // so pull-to-refresh cannot terminate the app on transient failures.
+            self.recordTrackingEvent("Location refresh failed: \(error.localizedDescription)")
+            print("[SYSTEM] Location update failed: \(error.localizedDescription)")
         }
     }
 
@@ -500,6 +564,54 @@ extension LocationManager: CLLocationManagerDelegate {
     private func recordTrackingEvent(_ message: String) {
         lastTrackingEventDate = Date()
         lastTrackingEventMessage = message
+    }
+
+    /// Avoid noisy UI jumps from tiny GPS drift while still evaluating geofence logic.
+    private func shouldPublishLocation(_ location: CLLocation) -> Bool {
+        guard location.horizontalAccuracy > 0 else { return false }
+        guard let last = lastPublishedLocation else { return true }
+
+        let movedMeters = location.distance(from: last)
+        let accuracyImproved = location.horizontalAccuracy + 5 < last.horizontalAccuracy
+        return movedMeters >= 20 || accuracyImproved
+    }
+
+    /// Enabling background location updates can assert if the app/runtime isn't
+    /// background-location-capable (common in simulator/debug edge cases).
+    /// We only enable it when "location" background mode is declared and we
+    /// have Always authorization; geofence monitoring still works otherwise.
+    private func configureBackgroundLocationUpdates() {
+        let shouldEnableBackgroundUpdates =
+            hasBackgroundAuthorization &&
+            hasLocationBackgroundMode &&
+            !isRunningInSimulator &&
+            !activeGeofences.isEmpty
+
+        locationManager.allowsBackgroundLocationUpdates = shouldEnableBackgroundUpdates
+        locationManager.showsBackgroundLocationIndicator = shouldEnableBackgroundUpdates
+    }
+
+    private var hasLocationBackgroundMode: Bool {
+        if let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] {
+            return modes.contains("location")
+        }
+
+        if let singleMode = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? String {
+            return singleMode
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .contains("location")
+        }
+
+        return false
+    }
+
+    private var isRunningInSimulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
     }
 }
 

@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import WatchConnectivity
 
 @main
 struct GAMELIFEApp: App {
@@ -26,7 +27,9 @@ struct GAMELIFEApp: App {
         // [SYSTEM]: Configure app defaults
         SettingsManager.shared.setDefaults()
         _ = CloudKitSyncManager.shared
-        _ = WatchConnectivityManager.shared
+        if WCSession.isSupported(), WCSession.default.isPaired {
+            _ = WatchConnectivityManager.shared
+        }
 
         // [SYSTEM]: Configure appearance
         configureAppearance()

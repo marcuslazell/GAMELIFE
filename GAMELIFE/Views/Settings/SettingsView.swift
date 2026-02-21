@@ -20,6 +20,7 @@ struct SettingsView: View {
     @AppStorage("useSystemAppearance") private var useSystemAppearance = true
     @AppStorage("preferDarkMode") private var preferDarkMode = true
     @AppStorage("questCompletionNotificationMode") private var questCompletionNotificationMode = NotificationManager.QuestCompletionNotificationMode.immediate.rawValue
+    @AppStorage("deathMechanicEnabled") private var deathMechanicEnabled = true
     @State private var showResetConfirmation = false
     @State private var showDeleteConfirmation = false
 
@@ -85,10 +86,12 @@ struct SettingsView: View {
                     let mode = NotificationManager.QuestCompletionNotificationMode(rawValue: rawValue) ?? .immediate
                     NotificationManager.shared.questCompletionNotificationMode = mode
                 }
+
+                Toggle("Death Mechanic Penalties", isOn: $deathMechanicEnabled)
             } header: {
                 Text("Preferences")
             } footer: {
-                Text("Set your default tab, appearance, and quest completion alert style in one place.")
+                Text("Set your default tab, appearance, alerts, and death penalties in one place. Turning off death penalties does not stop HP loss.")
             }
 
             // Neural Links Section

@@ -26,9 +26,13 @@ class QuestManager: ObservableObject {
 
     private let center = DeviceActivityCenter()
     private let appGroupID = "group.com.gamelife.shared"
-    private var sharedDefaults: UserDefaults? {
-        UserDefaults(suiteName: appGroupID)
-    }
+    private lazy var sharedDefaults: UserDefaults? = {
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil else {
+            print("[SYSTEM] App Group container unavailable for \(appGroupID). Shared Screen Time sync disabled.")
+            return nil
+        }
+        return UserDefaults(suiteName: appGroupID)
+    }()
 
     // Keys for App Group communication
     private enum SharedKeys {
@@ -39,6 +43,8 @@ class QuestManager: ObservableObject {
         static let activeScreenTimeQuests = "activeScreenTimeQuests"
         static let extensionLogs = "extensionLogs"
     }
+
+    private let verboseMonitoringLogs = false
 
     // MARK: - Initialization
 
@@ -89,7 +95,9 @@ class QuestManager: ObservableObject {
             // Store the monitoring state
             saveMonitoringState(questId: quest.id, apps: apps)
 
-            print("[SYSTEM] Started monitoring for quest: \(quest.title)")
+            if verboseMonitoringLogs {
+                print("[SYSTEM] Started monitoring for quest: \(quest.title)")
+            }
         } catch {
             print("[SYSTEM] Failed to start monitoring: \(error.localizedDescription)")
         }
@@ -103,14 +111,18 @@ class QuestManager: ObservableObject {
         // Clear monitoring state
         clearMonitoringState(questId: quest.id)
 
-        print("[SYSTEM] Stopped monitoring for quest: \(quest.title)")
+        if verboseMonitoringLogs {
+            print("[SYSTEM] Stopped monitoring for quest: \(quest.title)")
+        }
     }
 
     /// Stop all monitoring
     func stopAllMonitoring() {
         center.stopMonitoring()
         sharedDefaults?.removeObject(forKey: SharedKeys.monitoringQuests)
-        print("[SYSTEM] All monitoring stopped")
+        if verboseMonitoringLogs {
+            print("[SYSTEM] All monitoring stopped")
+        }
     }
 
     // MARK: - Extension Communication
@@ -124,7 +136,9 @@ class QuestManager: ObservableObject {
 
         guard !completedIds.isEmpty else { return }
 
-        print("[SYSTEM] Found \(completedIds.count) completed quest(s) from extension")
+        if verboseMonitoringLogs {
+            print("[SYSTEM] Found \(completedIds.count) completed quest(s) from extension")
+        }
 
         for questIdString in completedIds {
             if let uuid = UUID(uuidString: questIdString) {
@@ -230,6 +244,7 @@ class QuestManager: ObservableObject {
         let activeScreenTimeQuests = quests.filter {
             $0.trackingType == .screenTime && $0.status != .completed
         }
+        let monitoredStateMap = sharedDefaults?.dictionary(forKey: SharedKeys.monitoringQuests) as? [String: Data] ?? [:]
 
         var activeIDs = Set<UUID>()
         for quest in activeScreenTimeQuests {
@@ -237,6 +252,10 @@ class QuestManager: ObservableObject {
             guard let data = quest.screenTimeSelectionData,
                   let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data),
                   (!selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty) else {
+                continue
+            }
+            if monitoredStateMap[quest.id.uuidString] == data {
+                // Already monitored with the same selection; avoid restarting every save cycle.
                 continue
             }
             startMonitoring(for: quest, apps: selection)

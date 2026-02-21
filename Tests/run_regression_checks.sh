@@ -39,8 +39,10 @@ if grep -RInF 'overrideUserInterfaceStyle' "$ROOT/GAMELIFE" >/dev/null; then
   fail "Found UIKit appearance override forcing color scheme"
 fi
 
-grep -q 'allowsBackgroundLocationUpdates = false' "$ROOT/GAMELIFE/Services/LocationManager.swift" || fail "Location manager background updates not disabled"
+grep -q 'configureBackgroundLocationUpdates()' "$ROOT/GAMELIFE/Services/LocationManager.swift" || fail "Location manager should configure background updates safely"
+grep -q 'hasLocationBackgroundMode' "$ROOT/GAMELIFE/Services/LocationManager.swift" || fail "Location manager missing background mode capability guard"
 grep -q 'requestWhenInUseAuthorization()' "$ROOT/GAMELIFE/Services/LocationManager.swift" || fail "Location manager not using requestWhenInUseAuthorization"
+grep -q 'requestAlwaysAuthorization()' "$ROOT/GAMELIFE/Services/LocationManager.swift" || fail "Location manager not escalating to Always authorization"
 
 if awk '/struct StatusView: View/{flag=1} /\/\/ MARK: - Compact Header View/{flag=0} flag' \
   "$ROOT/GAMELIFE/Views/Status/StatusView.swift" | grep -n 'ScrollView' >/dev/null; then
@@ -94,8 +96,7 @@ xcodebuild \
   -project "$PROJECT" \
   -scheme GAMELIFE \
   -configuration Debug \
-  -sdk iphonesimulator \
-  -destination 'generic/platform=iOS Simulator' \
+  -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO \
   build >/tmp/gamelife_regression_build.log 2>&1 || {
   tail -n 120 /tmp/gamelife_regression_build.log

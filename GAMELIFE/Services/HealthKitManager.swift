@@ -254,6 +254,9 @@ class HealthKitManager: ObservableObject {
             let steps = statistics.sumQuantity()?.doubleValue(for: .count()) ?? 0
             return Int(steps)
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch steps: \(error)")
             return 0
         }
@@ -309,6 +312,9 @@ class HealthKitManager: ObservableObject {
 
             return totalSleepSeconds / 3600.0 // Convert to hours
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch sleep: \(error)")
             return 0
         }
@@ -341,6 +347,9 @@ class HealthKitManager: ObservableObject {
 
             return statistics.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch active energy: \(error)")
             return 0
         }
@@ -397,6 +406,9 @@ class HealthKitManager: ObservableObject {
             let totalSeconds = workouts.reduce(0) { $0 + $1.duration }
             return Int(totalSeconds / 60)
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch workout minutes: \(error)")
             return 0
         }
@@ -408,6 +420,9 @@ class HealthKitManager: ObservableObject {
             let workouts = try await fetchWorkouts(predicate: predicate)
             return workouts.count
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch workout count: \(error)")
             return 0
         }
@@ -460,6 +475,9 @@ class HealthKitManager: ObservableObject {
             let totalSeconds = samples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
             return Int(totalSeconds / 60)
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch mindfulness: \(error)")
             return 0
         }
@@ -741,9 +759,17 @@ class HealthKitManager: ObservableObject {
 
             return statistics.sumQuantity()?.doubleValue(for: unit) ?? 0
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch quantity sum for \(type): \(error)")
             return 0
         }
+    }
+
+    private func isNoDataHealthKitError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == "com.apple.healthkit" && nsError.code == 11
     }
 
     private func fetchCategoryDurationMinutes(
@@ -770,6 +796,9 @@ class HealthKitManager: ObservableObject {
             let seconds = samples.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
             return seconds / 60.0
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch category duration for \(type): \(error)")
             return 0
         }
@@ -805,6 +834,9 @@ class HealthKitManager: ObservableObject {
 
             return totalSleepSeconds / 3600.0
         } catch {
+            if isNoDataHealthKitError(error) {
+                return 0
+            }
             print("[SYSTEM] Failed to fetch sleep hours: \(error)")
             return 0
         }

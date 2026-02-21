@@ -31,6 +31,8 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     private let syncSchemaVersion = 1
 
     private var latestSnapshotData: Data?
+    private var suppressContextPushUntilStateChange = false
+    private var activationRequested = false
 
     private override init() {
         super.init()
@@ -42,15 +44,30 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
             isSupported = false
             return
         }
+        guard !isRunningInSimulator else {
+            isSupported = false
+            isPaired = false
+            isWatchAppInstalled = false
+            isReachable = false
+            lastSyncEvent = "Watch sync unavailable in Simulator."
+            return
+        }
 
-        let session = WCSession.default
-        session.delegate = self
-        session.activate()
-        applySessionState(from: session)
+        isSupported = true
+        requestActivationIfNeeded()
     }
 
     func publishSnapshot(player: Player, quests: [DailyQuest], activities: [ActivityLogEntry]) {
         guard WCSession.isSupported() else { return }
+        guard !isRunningInSimulator else { return }
+        let session = WCSession.default
+        guard session.isPaired else {
+            isPaired = false
+            isWatchAppInstalled = false
+            isReachable = false
+            lastSyncEvent = "No paired Apple Watch detected."
+            return
+        }
         guard let data = makeSnapshotData(player: player, quests: quests, activities: activities) else { return }
 
         latestSnapshotData = data
@@ -59,15 +76,52 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
     private func applySessionState(from session: WCSession) {
         isSupported = WCSession.isSupported()
+        guard session.activationState == .activated else {
+            isPaired = false
+            isWatchAppInstalled = false
+            isReachable = false
+            return
+        }
+
         isPaired = session.isPaired
         isWatchAppInstalled = session.isWatchAppInstalled
         isReachable = session.isReachable
+        if session.isPaired && session.isWatchAppInstalled {
+            suppressContextPushUntilStateChange = false
+        }
     }
 
     private func sendSnapshotContext(_ data: Data) {
         let session = WCSession.default
+        guard !isRunningInSimulator else { return }
+        guard session.activationState == .activated else {
+            requestActivationIfNeeded()
+            lastSyncEvent = "Watch session not yet activated."
+            return
+        }
+
+        if suppressContextPushUntilStateChange {
+            applySessionState(from: session)
+            if !session.isPaired || !session.isWatchAppInstalled {
+                return
+            }
+            suppressContextPushUntilStateChange = false
+        }
+
+        guard session.isPaired else {
+            suppressContextPushUntilStateChange = true
+            isPaired = false
+            isWatchAppInstalled = false
+            isReachable = false
+            lastSyncEvent = "No paired Apple Watch detected."
+            return
+        }
         guard session.activationState == .activated else {
             lastSyncEvent = "Watch session not yet activated."
+            return
+        }
+        guard session.isWatchAppInstalled else {
+            lastSyncEvent = "Watch app not installed."
             return
         }
 
@@ -79,6 +133,14 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
             lastSyncDate = Date()
             lastSyncEvent = "Snapshot pushed to watch context."
         } catch {
+            let nsError = error as NSError
+            let watchAppNotInstalledCode = 7014 // WCErrorCodeWatchAppNotInstalled
+            if nsError.domain == WCErrorDomain,
+               nsError.code == watchAppNotInstalledCode {
+                suppressContextPushUntilStateChange = true
+                lastSyncEvent = "Watch app not installed."
+                return
+            }
             lastSyncEvent = "Watch context update failed: \(error.localizedDescription)"
         }
 
@@ -230,12 +292,19 @@ extension WatchConnectivityManager: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            activationRequested = false
             applySessionState(from: session)
             if let error {
                 lastSyncEvent = "Watch activation failed: \(error.localizedDescription)"
                 return
             }
             lastSyncEvent = "Watch session activated."
+            guard session.isPaired, session.isWatchAppInstalled else {
+                lastSyncEvent = session.isPaired
+                    ? "Watch app not installed."
+                    : "No paired Apple Watch detected."
+                return
+            }
             if let latestSnapshotData {
                 sendSnapshotContext(latestSnapshotData)
             } else {
@@ -261,9 +330,14 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
         Task { @MainActor in
+            activationRequested = false
             applySessionState(from: session)
-            WCSession.default.activate()
-            lastSyncEvent = "Watch session reactivating."
+            if session.isPaired {
+                requestActivationIfNeeded()
+            } else {
+                suppressContextPushUntilStateChange = true
+                lastSyncEvent = "No paired Apple Watch detected."
+            }
         }
     }
 
@@ -305,6 +379,37 @@ extension WatchConnectivityManager: WCSessionDelegate {
             handleBackgroundPayload(applicationContext)
             applySessionState(from: session)
         }
+    }
+}
+
+private extension WatchConnectivityManager {
+    func requestActivationIfNeeded() {
+        guard !isRunningInSimulator else { return }
+        guard WCSession.isSupported() else { return }
+        guard !activationRequested else { return }
+
+        let session = WCSession.default
+        guard session.isPaired else {
+            isPaired = false
+            isWatchAppInstalled = false
+            isReachable = false
+            suppressContextPushUntilStateChange = true
+            lastSyncEvent = "No paired Apple Watch detected."
+            return
+        }
+
+        activationRequested = true
+        session.delegate = self
+        session.activate()
+        lastSyncEvent = "Activating watch session..."
+    }
+
+    var isRunningInSimulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
     }
 }
 

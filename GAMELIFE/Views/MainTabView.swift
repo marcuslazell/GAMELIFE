@@ -94,6 +94,9 @@ struct MainTabView: View {
         .onChange(of: defaultTab) { _, newValue in
             selectedTab = newValue
         }
+        .sheet(item: $gameEngine.deathPenaltySummary) { summary in
+            DeathPenaltySummaryView(summary: summary)
+        }
     }
 }
 
@@ -132,6 +135,82 @@ enum GameTab: Int, CaseIterable {
 
 extension Notification.Name {
     static let showSystemMessage = Notification.Name("showSystemMessage")
+}
+
+struct DeathPenaltySummaryView: View {
+    let summary: DeathPenaltySummary
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("You were defeated.")
+                        .font(SystemTypography.titleMedium)
+                        .foregroundStyle(SystemTheme.criticalRed)
+
+                    Text("You missed \(summary.missedQuestCount) required quest\(summary.missedQuestCount == 1 ? "" : "s"). Health was restored, and penalties were applied.")
+                        .font(SystemTypography.body)
+                        .foregroundStyle(SystemTheme.textSecondary)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Rank")
+                            .font(SystemTypography.systemMessage)
+                            .foregroundStyle(SystemTheme.textTertiary)
+                        Text(summary.wasDemoted ? "\(summary.previousRank.rawValue) → \(summary.newRank.rawValue)" : "\(summary.previousRank.rawValue) (no demotion)")
+                            .font(SystemTypography.mono(16, weight: .bold))
+                            .foregroundStyle(summary.wasDemoted ? SystemTheme.warningOrange : SystemTheme.textPrimary)
+                    }
+                    .padding()
+                    .systemCard()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Currency")
+                            .font(SystemTypography.systemMessage)
+                            .foregroundStyle(SystemTheme.textTertiary)
+                        Text("-\(summary.goldLost) Gold")
+                            .font(SystemTypography.mono(15, weight: .bold))
+                            .foregroundStyle(SystemTheme.goldColor)
+                        Text("\(summary.goldRemaining) Gold remaining")
+                            .font(SystemTypography.caption)
+                            .foregroundStyle(SystemTheme.textSecondary)
+                    }
+                    .padding()
+                    .systemCard()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Stat Loss (\(summary.statLossPercent)%)")
+                            .font(SystemTypography.systemMessage)
+                            .foregroundStyle(SystemTheme.textTertiary)
+                        ForEach(summary.statLosses) { loss in
+                            HStack {
+                                Label(loss.stat.rawValue, systemImage: loss.stat.icon)
+                                    .font(SystemTypography.caption)
+                                    .foregroundStyle(loss.stat.color)
+                                Spacer()
+                                Text("-\(loss.lost)")
+                                    .font(SystemTypography.mono(13, weight: .bold))
+                                    .foregroundStyle(SystemTheme.criticalRed)
+                            }
+                        }
+                    }
+                    .padding()
+                    .systemCard()
+                }
+                .padding()
+            }
+            .background(SystemTheme.backgroundPrimary.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Continue") {
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle("Death Report")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
 }
 
 // MARK: - Preview

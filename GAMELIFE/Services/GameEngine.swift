@@ -11,6 +11,7 @@ import Combine
 import SwiftUI
 import CoreLocation
 import UIKit
+import WatchConnectivity
 
 // MARK: - Game Engine
 
@@ -22,6 +23,7 @@ class GameEngine: ObservableObject {
     static let shared = GameEngine()
     private static let defaultQuestMigrationKey = "didMigrateDefaultQuestTemplates"
     private static let zeroStatBaselineMigrationKey = "didMigrateZeroStatBaseline"
+    private static let deathMechanicEnabledKey = "deathMechanicEnabled"
 
     // MARK: - Published Properties
 
@@ -41,6 +43,7 @@ class GameEngine: ObservableObject {
     @Published var currentLootBox: LootBox?
     @Published private(set) var canUndoLatestQuestCompletion = false
     @Published private(set) var lastUndoQuestTitle: String?
+    @Published var deathPenaltySummary: DeathPenaltySummary?
 
     // MARK: - Private Properties
 
@@ -345,6 +348,8 @@ class GameEngine: ObservableObject {
         let previousRank = PlayerRank.rank(forLevel: previousLevel)
         let newRank = PlayerRank.rank(forLevel: newLevel)
         let rankUp = newRank != previousRank
+        let levelsGained = max(0, newLevel - previousLevel)
+        let levelUpRecovery = applyLevelUpRecoveryBonus(levelsGained: levelsGained)
 
         // Update title if rank changed
         if rankUp {
@@ -368,6 +373,41 @@ class GameEngine: ObservableObject {
 
         // Send notification
         NotificationManager.shared.sendLevelUpNotification(level: newLevel, rank: newRank)
+
+        if levelUpRecovery.healedHP > 0 || levelUpRecovery.bonusGold > 0 {
+            var detailParts: [String] = []
+            if levelUpRecovery.healedHP > 0 {
+                detailParts.append("+\(levelUpRecovery.healedHP) HP")
+            }
+            if levelUpRecovery.bonusGold > 0 {
+                detailParts.append("+\(levelUpRecovery.bonusGold) Gold")
+            }
+            logActivity(
+                type: .rewardConsumed,
+                title: "Level Up Bonus",
+                detail: detailParts.joined(separator: " • ")
+            )
+        }
+    }
+
+    private func applyLevelUpRecoveryBonus(levelsGained: Int) -> (healedHP: Int, bonusGold: Int) {
+        guard levelsGained > 0 else { return (0, 0) }
+
+        var totalHealed = 0
+        var totalBonusGold = 0
+
+        for _ in 0..<levelsGained {
+            if player.currentHP < player.maxHP {
+                let hpBefore = player.currentHP
+                player.currentHP = min(player.maxHP, player.currentHP + 15)
+                totalHealed += max(0, player.currentHP - hpBefore)
+            } else {
+                player.gold += 15
+                totalBonusGold += 15
+            }
+        }
+
+        return (totalHealed, totalBonusGold)
     }
 
     // MARK: - Boss Fights
@@ -779,12 +819,97 @@ class GameEngine: ObservableObject {
 
         if player.currentHP == 0 {
             applyPenalty(reason: .missedDailyQuests(count: missedQuestCount))
-            player.currentHP = player.maxHP
-
-            SystemMessageHelper.showWarning(
-                "HP depleted. You missed \(missedQuestCount) quest\(missedQuestCount == 1 ? "" : "s"), penalty enforced."
-            )
+            if isDeathMechanicEnabled {
+                deathPenaltySummary = applyDeathConsequences(missedQuestCount: missedQuestCount)
+                SystemMessageHelper.showWarning("You were defeated. Death penalties applied.")
+            } else {
+                player.currentHP = player.maxHP
+                SystemMessageHelper.showWarning("HP depleted. Death penalties are disabled.")
+            }
         }
+    }
+
+    private var isDeathMechanicEnabled: Bool {
+        UserDefaults.standard.object(forKey: Self.deathMechanicEnabledKey) as? Bool ?? true
+    }
+
+    private func applyDeathConsequences(missedQuestCount: Int) -> DeathPenaltySummary {
+        let previousRank = player.rank
+        let statLossRatio = statLossRatio(for: previousRank)
+
+        var statLosses: [DeathPenaltyStatLoss] = []
+        for type in StatType.allCases {
+            guard var stat = player.stats[type] else { continue }
+            let before = stat.totalValue
+
+            let baseLoss = lossAmount(for: stat.baseValue, ratio: statLossRatio)
+            let bonusLoss = lossAmount(for: stat.bonusValue, ratio: statLossRatio)
+
+            stat.baseValue = max(0, stat.baseValue - baseLoss)
+            stat.bonusValue = max(0, stat.bonusValue - bonusLoss)
+            player.stats[type] = stat
+
+            let after = stat.totalValue
+            if after < before {
+                statLosses.append(DeathPenaltyStatLoss(stat: type, before: before, after: after))
+            }
+        }
+
+        let goldBefore = player.gold
+        let goldLoss = goldBefore > 0 ? Int((Double(goldBefore) * 0.20).rounded(.up)) : 0
+        player.gold = max(0, goldBefore - goldLoss)
+
+        let demotionResult = demotePlayerRankByOne()
+        player.currentHP = player.maxHP
+
+        return DeathPenaltySummary(
+            missedQuestCount: missedQuestCount,
+            previousRank: previousRank,
+            newRank: demotionResult.newRank,
+            wasDemoted: demotionResult.wasDemoted,
+            statLossPercent: Int((statLossRatio * 100).rounded()),
+            statLosses: statLosses,
+            goldLost: goldLoss,
+            goldRemaining: player.gold
+        )
+    }
+
+    private func statLossRatio(for rank: PlayerRank) -> Double {
+        switch rank {
+        case .e: return 0.05
+        case .d: return 0.08
+        case .c: return 0.10
+        case .b: return 0.12
+        case .a: return 0.15
+        case .s: return 0.18
+        case .ss: return 0.22
+        case .sss: return 0.26
+        case .monarch: return 0.30
+        }
+    }
+
+    private func lossAmount(for value: Int, ratio: Double) -> Int {
+        guard value > 0 else { return 0 }
+        return max(1, Int((Double(value) * ratio).rounded(.up)))
+    }
+
+    private func demotePlayerRankByOne() -> (newRank: PlayerRank, wasDemoted: Bool) {
+        let ranks = PlayerRank.allCases
+        let currentRank = player.rank
+        guard let currentIndex = ranks.firstIndex(of: currentRank), currentIndex > 0 else {
+            return (currentRank, false)
+        }
+
+        let demotedRank = ranks[currentIndex - 1]
+        let targetLevel = max(1, demotedRank.minLevel)
+        player.level = targetLevel
+        player.title = demotedRank.title
+
+        let lowerBoundXP = GameFormulas.xpRequired(forLevel: targetLevel)
+        let upperBoundXP = max(lowerBoundXP, GameFormulas.xpRequired(forLevel: targetLevel + 1) - 1)
+        player.currentXP = min(max(player.currentXP, lowerBoundXP), upperBoundXP)
+
+        return (demotedRank, true)
     }
 
     private func syncBossLinksWithQuests() {
@@ -1418,11 +1543,20 @@ class GameEngine: ObservableObject {
                 recentActivity: recentActivity
             )
         }
-        WatchConnectivityManager.shared.publishSnapshot(
-            player: player,
-            quests: dailyQuests,
-            activities: recentActivity
-        )
+        if WCSession.isSupported() {
+            #if targetEnvironment(simulator)
+            // Skip watch snapshot publishes in simulator builds.
+            #else
+            let session = WCSession.default
+            if session.isPaired, session.activationState == .activated, session.isWatchAppInstalled {
+                WatchConnectivityManager.shared.publishSnapshot(
+                    player: player,
+                    quests: dailyQuests,
+                    activities: recentActivity
+                )
+            }
+            #endif
+        }
     }
 
     func recordExternalActivity(type: ActivityLogType, title: String, detail: String) {
@@ -1502,6 +1636,29 @@ struct LevelUpData {
     let newRank: PlayerRank
     let rankUp: Bool
     let statsUnlocked: [StatType]
+}
+
+struct DeathPenaltySummary: Identifiable {
+    let id = UUID()
+    let missedQuestCount: Int
+    let previousRank: PlayerRank
+    let newRank: PlayerRank
+    let wasDemoted: Bool
+    let statLossPercent: Int
+    let statLosses: [DeathPenaltyStatLoss]
+    let goldLost: Int
+    let goldRemaining: Int
+}
+
+struct DeathPenaltyStatLoss: Identifiable {
+    let id = UUID()
+    let stat: StatType
+    let before: Int
+    let after: Int
+
+    var lost: Int {
+        max(0, before - after)
+    }
 }
 
 // MARK: - Penalty Reason

@@ -23,9 +23,12 @@ class GAMELIFEMonitor: DeviceActivityMonitor {
     private let store = ManagedSettingsStore()
     private let appGroupID = "group.com.gamelife.shared"
 
-    private var sharedDefaults: UserDefaults? {
-        UserDefaults(suiteName: appGroupID)
-    }
+    private lazy var sharedDefaults: UserDefaults? = {
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil else {
+            return nil
+        }
+        return UserDefaults(suiteName: appGroupID)
+    }()
 
     // MARK: - Interval Events
 
